@@ -1,8 +1,9 @@
-# MCP Interceptors (Draft Extension)
-
-This repository provides a multi-language reference implementation of the proposed interceptor framework for the Model Context Protocol (MCP), as described in [SEP-1763](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1763).
+# MCP Interceptors (Experimental Extension)
 
 > #### **Status:** Experimental. This work is for prototyping and feedback only, and is not an accepted or official MCP extension.
+
+This repository provides a multi-language reference implementation of the proposed interceptor extension for the Model Context Protocol (MCP), as described in [SEP-1763](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1763).
+
 
 ## Implementations
 
