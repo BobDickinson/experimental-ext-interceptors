@@ -54,27 +54,46 @@ type Server struct {
 	receivingMethodHandler_ MethodHandler
 	resourceSubscriptions   map[string]map[*ServerSession]bool // uri -> session -> bool
 	pendingNotifications    map[string]*time.Timer             // notification name -> timer for pending notification send
-	customMethods           map[string]CustomMethodHandler
+	customMethods           map[string]methodInfo
 }
 
-// CustomMethodHandler handles a custom JSON-RPC method registered via
-// [Server.AddCustomMethod]. It receives the raw JSON params and returns
-// a result that will be marshaled to JSON.
-type CustomMethodHandler func(ctx context.Context, ss *ServerSession, params json.RawMessage) (any, error)
+// NOTE: ParamsBase, ResultBase, and AddReceivingCustomMethod are additions to
+// the upstream go-sdk to route custom JSON-RPC methods through receiving
+// handler calls like any built-in MCP method, as needed by the MCP interceptors
+// extension (SEP). This is a reference implementation, so there's some
+// inefficiency; receivingMethodInfos() merges maps on every request instead of
+// caching.
 
-// AddCustomMethod registers a custom JSON-RPC method on the server.
-// Custom methods bypass the typed Params/Result pipeline and operate
-// on raw JSON. They are dispatched before the standard method handlers.
-//
-// This is useful for extensions that define their own JSON-RPC methods
-// (e.g. interceptors/list, interceptor/executeChain).
-func (s *Server) AddCustomMethod(method string, handler CustomMethodHandler) {
+// ParamsBase can be embedded by types outside this package to satisfy the
+// mcp.Params interface, including its unexported marker method.
+type ParamsBase struct {
+	Meta `json:"_meta,omitempty"`
+}
+
+func (x *ParamsBase) isParams()              {}
+func (x *ParamsBase) GetProgressToken() any  { return getProgressToken(x) }
+func (x *ParamsBase) SetProgressToken(t any) { setProgressToken(x, t) }
+
+// ResultBase can be embedded by types outside this package to satisfy the
+// mcp.Result interface, including its unexported marker method.
+type ResultBase struct {
+	Meta `json:"_meta,omitempty"`
+}
+
+func (x *ResultBase) isResult() {}
+
+// AddReceivingCustomMethod registers a typed custom JSON-RPC method that flows
+// through receiving handler calls like any built-in MCP method. P must embed
+// ParamsBase and R must embed ResultBase to satisfy the interface constraints.
+// Go does not support generic methods, so this is a package-level function.
+func AddReceivingCustomMethod[P paramsPtr[T], R Result, T any](
+	s *Server, method string,
+	handler typedServerMethodHandler[P, R],
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.customMethods == nil {
-		s.customMethods = make(map[string]CustomMethodHandler)
-	}
-	s.customMethods[method] = handler
+	// missingParamsOK: custom methods may legally omit params (e.g. interceptors/list).
+	s.customMethods[method] = newServerMethodInfo(handler, missingParamsOK)
 }
 
 // hasCustomMethod reports whether the given method is registered as a custom method.
@@ -83,17 +102,6 @@ func (s *Server) hasCustomMethod(method string) bool {
 	defer s.mu.Unlock()
 	_, ok := s.customMethods[method]
 	return ok
-}
-
-// callCustomMethod calls the custom method handler for the given method.
-func (s *Server) callCustomMethod(ctx context.Context, ss *ServerSession, method string, params json.RawMessage) (any, error) {
-	s.mu.Lock()
-	h := s.customMethods[method]
-	s.mu.Unlock()
-	if h == nil {
-		return nil, fmt.Errorf("unknown custom method %q", method)
-	}
-	return h(ctx, ss, params)
 }
 
 // ServerOptions is used to configure behavior of the server.
@@ -235,6 +243,7 @@ func NewServer(impl *Implementation, options *ServerOptions) *Server {
 		receivingMethodHandler_: defaultReceivingMethodHandler[*ServerSession],
 		resourceSubscriptions:   make(map[string]map[*ServerSession]bool),
 		pendingNotifications:    make(map[string]*time.Timer),
+		customMethods:           make(map[string]methodInfo),
 	}
 }
 
@@ -1426,7 +1435,12 @@ func initializeMethodInfo() methodInfo {
 
 func (ss *ServerSession) sendingMethodInfos() map[string]methodInfo { return clientMethodInfos }
 
-func (ss *ServerSession) receivingMethodInfos() map[string]methodInfo { return serverMethodInfos }
+func (ss *ServerSession) receivingMethodInfos() map[string]methodInfo {
+	infos := make(map[string]methodInfo)
+	maps.Copy(infos, serverMethodInfos)
+	maps.Copy(infos, ss.server.customMethods)
+	return infos
+}
 
 func (ss *ServerSession) sendingMethodHandler() MethodHandler {
 	s := ss.server
@@ -1474,12 +1488,6 @@ func (ss *ServerSession) handle(ctx context.Context, req *jsonrpc.Request) (any,
 	// server->client calls and notifications to the incoming request from which
 	// they originated. See [idContextKey] for details.
 	ctx = context.WithValue(ctx, idContextKey{}, req.ID)
-
-	// Dispatch custom methods before the standard typed pipeline.
-	if ss.server.hasCustomMethod(req.Method) {
-		return ss.server.callCustomMethod(ctx, ss, req.Method, req.Params)
-	}
-
 	return handleReceive(ctx, ss, req)
 }
 
