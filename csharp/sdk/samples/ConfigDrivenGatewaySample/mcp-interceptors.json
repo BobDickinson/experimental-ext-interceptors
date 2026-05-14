@@ -1,0 +1,29 @@
+{
+  "serverInfo": {
+    "name": "config-driven-interceptor-proxy",
+    "version": "1.0.0"
+  },
+  "backend": {
+    "transport": "http",
+    "name": "EverythingServer",
+    "endpoint": "http://localhost:3001/mcp"
+  },
+  "staticInterceptors": [
+    {
+      "transport": "http",
+      "name": "SecurityInterceptorServer",
+      "endpoint": "http://localhost:3002/mcp"
+    }
+  ],
+  "dynamicInterceptors": {
+    "alice": [
+      {
+        "connectionId": "alice-sink",
+        "transport": "http",
+        "name": "AliceInterceptorServer",
+        "endpoint": "http://localhost:3003/mcp"
+      }
+    ]
+  },
+  "interceptedEvents": ["tools/call"]
+}
