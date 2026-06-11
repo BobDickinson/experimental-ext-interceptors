@@ -73,6 +73,14 @@ const entry = defineInterceptor(
 );
 ```
 
+`defineInterceptor` binds handler parameters using `Function.prototype.toString` heuristics (not full reflection like C#). Prefer:
+
+- `(params) => { … }` — `params` is the full invoke request (`payload`, `event`, `phase`, `context`, …)
+- `({ payload, phase }) => { … }` — destructuring from the same object
+- `(payload, event, phase, context, signal) =>` — positional by arity
+
+Avoid `(...rest) =>` and relying on default parameters alone; use `(params) =>` instead.
+
 ## Quick start — client API
 
 ```typescript

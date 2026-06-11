@@ -31,7 +31,7 @@ const InterceptorsListResultSchema = ResultSchema.extend({
 });
 
 describe('MCP SDK v1 server wiring', () => {
-  it('handles interceptors/list and advertises capabilities.interceptor on the server', async () => {
+  it('handles interceptors/list; v1 client omits interceptor from parsed initialize capabilities', async () => {
     const server = new Server(
       { name: 'spike-interceptor-server', version: '0.0.0' },
       { capabilities: {} },
@@ -58,19 +58,11 @@ describe('MCP SDK v1 server wiring', () => {
       client.connect(clientTransport),
     ]);
 
-    // Server retains SEP capability after merge (source of truth for what we advertise).
+    // v1 Client parses initialize with ServerCapabilitiesSchema (no `interceptor` field).
     type CapsWithInterceptor = ServerCapabilities & {
       interceptor?: { supportedEvents: string[] };
     };
-    // v1 Server.getCapabilities() is untyped in @modelcontextprotocol/sdk
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call -- extension field not in ServerCapabilitiesSchema
-    const serverCaps = server.getCapabilities() as CapsWithInterceptor;
-    expect(serverCaps).toMatchObject({
-      interceptor: { supportedEvents: ['tools/call'] },
-    });
-
-    // v1 Client parses initialize with ServerCapabilitiesSchema (no `interceptor` field).
-    const caps = client.getServerCapabilities();
+    const caps = client.getServerCapabilities() as CapsWithInterceptor | undefined;
     expect(caps?.interceptor).toBeUndefined();
 
     const listResult = await client.request(

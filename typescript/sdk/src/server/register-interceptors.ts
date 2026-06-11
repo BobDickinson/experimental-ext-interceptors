@@ -14,6 +14,7 @@ import {
   ListInterceptorsRequestSchema,
   ListInterceptorsResultSchema,
 } from '../protocol/zod-schemas.js';
+import { interceptorNotFoundError } from '../protocol/mcp-errors.js';
 import { registerInterceptorCapabilities } from './capabilities.js';
 
 export type InterceptorHandler = (
@@ -68,7 +69,7 @@ export function registerInterceptorsOnServer(
     const params = request.params as InvokeInterceptorRequestParams;
     const entry = byName.get(params.name);
     if (!entry) {
-      throw new Error(`Interceptor '${params.name}' not found`);
+      throw interceptorNotFoundError(params.name);
     }
 
     const signal =

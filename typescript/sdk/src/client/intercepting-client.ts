@@ -108,7 +108,7 @@ export class InterceptingMcpClient {
 
     const result = await this.inner.listTools(undefined, { signal });
 
-    await this.chainRunner.runChainPhaseOrThrow(
+    const processedResponse = await this.chainRunner.runChainPhaseOrThrow(
       'tools/list',
       InterceptionEvents.ToolsList,
       'response',
@@ -116,7 +116,7 @@ export class InterceptingMcpClient {
       signal,
     );
 
-    return result;
+    return processedResponse as ListToolsResult;
   }
 
   async listPrompts(signal?: AbortSignal): Promise<ListPromptsResult> {
@@ -134,7 +134,7 @@ export class InterceptingMcpClient {
 
     const result = await this.inner.listPrompts(undefined, { signal });
 
-    await this.chainRunner.runChainPhaseOrThrow(
+    const processedResponse = await this.chainRunner.runChainPhaseOrThrow(
       'prompts/list',
       InterceptionEvents.PromptsList,
       'response',
@@ -142,7 +142,7 @@ export class InterceptingMcpClient {
       signal,
     );
 
-    return result;
+    return processedResponse as ListPromptsResult;
   }
 
   async getPrompt(
@@ -201,7 +201,7 @@ export class InterceptingMcpClient {
 
     const result = await this.inner.listResources(undefined, { signal });
 
-    await this.chainRunner.runChainPhaseOrThrow(
+    const processedResponse = await this.chainRunner.runChainPhaseOrThrow(
       'resources/list',
       InterceptionEvents.ResourcesList,
       'response',
@@ -209,7 +209,7 @@ export class InterceptingMcpClient {
       signal,
     );
 
-    return result;
+    return processedResponse as ListResourcesResult;
   }
 
   async readResource(uri: string, signal?: AbortSignal): Promise<ReadResourceResult> {

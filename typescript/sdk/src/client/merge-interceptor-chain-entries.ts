@@ -20,21 +20,22 @@ export async function listInterceptorChainEntries(
   hosts: InterceptorChainHost[],
   listParams?: { event?: string },
 ): Promise<InterceptorChainEntry[]> {
-  const entries: InterceptorChainEntry[] = [];
+  const listedByHost = await Promise.all(
+    hosts.map(async (host, i) => {
+      if (!host) {
+        return [] as InterceptorChainEntry[];
+      }
+      const label = hostLabel(host, i);
+      const listed = await listInterceptors(host.client, listParams);
+      return listed.interceptors.map((descriptor) => ({
+        descriptor,
+        client: host.client,
+        hostLabel: label,
+      }));
+    }),
+  );
 
-  for (let i = 0; i < hosts.length; i++) {
-    const host = hosts[i];
-    if (!host) {
-      continue;
-    }
-    const label = hostLabel(host, i);
-    const listed = await listInterceptors(host.client, listParams);
-    for (const descriptor of listed.interceptors) {
-      entries.push({ descriptor, client: host.client, hostLabel: label });
-    }
-  }
-
-  return entries;
+  return listedByHost.flat();
 }
 
 /**

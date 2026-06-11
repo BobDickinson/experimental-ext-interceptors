@@ -3,8 +3,9 @@
 import { describe, it, expect } from 'vitest';
 import { InterceptionEvents } from '../protocol/constants.js';
 import { validationSuccess } from '../protocol/results.js';
+import type { InvokeInterceptorRequestParams } from '../protocol/types.js';
 import { buildInterceptorDescriptor } from './interceptor-definition.js';
-import { defineInterceptor, invokeHandlerFunction } from './reflection.js';
+import { defineInterceptor, invokeHandlerFunction, type InterceptorHandlerFn } from './reflection.js';
 
 describe('defineInterceptor / reflection', () => {
   it('builds descriptor metadata from options', () => {
@@ -58,18 +59,44 @@ describe('defineInterceptor / reflection', () => {
   });
 
   it('binds named parameters (payload, event, phase)', async () => {
-    const result = await invokeHandlerFunction(
-      (payload: unknown, event: string, phase: 'request' | 'response') =>
-        validationSuccess(phase),
-      'validation',
-      {
-        name: 'x',
-        event: InterceptionEvents.ToolsCall,
-        phase: 'request',
-        payload: {},
-      },
-    );
+    const handler: InterceptorHandlerFn = (payload, event, phase) =>
+      validationSuccess(phase as 'request' | 'response');
+
+    const result = await invokeHandlerFunction(handler, 'validation', {
+      name: 'x',
+      event: InterceptionEvents.ToolsCall,
+      phase: 'request',
+      payload: {},
+    });
     expect(result.type).toBe('validation');
+  });
+
+  it('binds destructuring parameters from invoke params', async () => {
+    const reg = defineInterceptor(
+      { name: 'destructure-val', type: 'validation', events: [InterceptionEvents.ToolsCall] },
+      (({ payload, phase }: InvokeInterceptorRequestParams) => {
+        if (payload && typeof payload === 'object' && 'ok' in payload) {
+          return validationSuccess(phase);
+        }
+        return {
+          type: 'validation' as const,
+          phase,
+          valid: false,
+          severity: 'error' as const,
+          messages: [{ message: 'bad', severity: 'error' as const }],
+        };
+      }) as InterceptorHandlerFn,
+    );
+
+    const ok = await reg.handler({
+      name: 'destructure-val',
+      event: InterceptionEvents.ToolsCall,
+      phase: 'request',
+      payload: { ok: true },
+    });
+    if (ok.type === 'validation') {
+      expect(ok.valid).toBe(true);
+    }
   });
 
   it('supports async handlers', async () => {

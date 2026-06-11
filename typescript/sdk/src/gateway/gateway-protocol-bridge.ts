@@ -14,6 +14,8 @@ import type {
   InvokeInterceptorRequestParams,
   ListInterceptorsRequestParams,
 } from '../protocol/types.js';
+import { interceptorNotFoundError, isInvalidParamsError } from '../protocol/mcp-errors.js';
+
 function readInterceptorCapability(client: Client): InterceptorsCapability | undefined {
   const caps = client.getServerCapabilities() as ServerCapabilities & {
     interceptor?: InterceptorsCapability;
@@ -23,6 +25,8 @@ function readInterceptorCapability(client: Client): InterceptorsCapability | und
 
 export class GatewayInterceptorProtocolBridge {
   private readonly interceptorClients: Client[];
+  private clientByInterceptorName: Map<string, Client> | undefined;
+  private routingBuild: Promise<void> | undefined;
 
   constructor(interceptorClients: Client[]) {
     this.interceptorClients = interceptorClients;
@@ -65,25 +69,57 @@ export class GatewayInterceptorProtocolBridge {
 
     server.setRequestHandler(InvokeInterceptorRequestSchema, async (request) => {
       const params = request.params as InvokeInterceptorRequestParams;
+      return (await this.invokeOnInterceptorHost(params)) as unknown as Record<string, unknown>;
+    });
+  }
 
-      for (const client of this.interceptorClients) {
-        try {
-          const result = await invokeInterceptor(client, params);
-          return result as unknown as Record<string, unknown>;
-        } catch (err) {
-          const code =
-            typeof err === 'object' &&
-            err !== null &&
-            'code' in err &&
-            (err as { code: unknown }).code === -32602;
-          if (code) {
-            continue;
-          }
-          throw err;
+  /** Drop cached name→client routing (e.g. after interceptor host reconnect). */
+  invalidateRoutingCache(): void {
+    this.clientByInterceptorName = undefined;
+    this.routingBuild = undefined;
+  }
+
+  private async ensureRoutingTable(): Promise<Map<string, Client>> {
+    if (this.clientByInterceptorName) {
+      return this.clientByInterceptorName;
+    }
+
+    if (!this.routingBuild) {
+      this.routingBuild = this.buildRoutingTable();
+    }
+    await this.routingBuild;
+    return this.clientByInterceptorName ?? new Map();
+  }
+
+  private async buildRoutingTable(): Promise<void> {
+    const map = new Map<string, Client>();
+    for (const client of this.interceptorClients) {
+      const listed = await listInterceptors(client);
+      for (const descriptor of listed.interceptors) {
+        if (!map.has(descriptor.name)) {
+          map.set(descriptor.name, client);
         }
       }
+    }
+    this.clientByInterceptorName = map;
+  }
 
-      throw new Error(`Interceptor '${params.name}' not found on any interceptor server`);
-    });
+  private async invokeOnInterceptorHost(
+    params: InvokeInterceptorRequestParams,
+  ): Promise<Awaited<ReturnType<typeof invokeInterceptor>>> {
+    const routing = await this.ensureRoutingTable();
+    const client = routing.get(params.name);
+    if (!client) {
+      throw interceptorNotFoundError(params.name);
+    }
+
+    try {
+      return await invokeInterceptor(client, params);
+    } catch (err) {
+      if (isInvalidParamsError(err)) {
+        this.invalidateRoutingCache();
+      }
+      throw err;
+    }
   }
 }

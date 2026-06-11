@@ -21,6 +21,16 @@ export type InterceptorHandlerFn = (...args: unknown[]) =>
 /**
  * Build a {@link RegisteredInterceptor} from a handler function and definition options
  * (TypeScript equivalent of C# `[McpServerInterceptor]` + `ReflectionMcpServerInterceptor`).
+ *
+ * **Parameter binding (not full reflection):** handlers are invoked using parameter-name
+ * heuristics from `Function.prototype.toString`, or positional arity fallback. This is weaker
+ * than C# `MethodInfo` reflection. Supported shapes:
+ *
+ * - `(params) =>` where `params` receives the full {@link InvokeInterceptorRequestParams}
+ * - `({ payload, phase, context }) =>` — destructuring from that same object
+ * - `(payload, event, phase, context, signal) =>` — positional by arity
+ *
+ * Avoid `(...rest) =>` and default-parameter-only signatures; use `(params) =>` instead.
  */
 export function defineInterceptor(
   options: InterceptorDefinitionOptions,
@@ -53,6 +63,15 @@ function bindHandlerArguments(
   request: InvokeInterceptorRequestParams,
   signal?: AbortSignal,
 ): unknown[] {
+  const src = fn.toString();
+  const parenMatch = src.match(/^[^(]*\(([^)]*)\)/);
+  const paramsList = parenMatch?.[1]?.trim() ?? '';
+
+  // Destructuring: ({ payload, phase }) => … — pass the full invoke params object.
+  if (paramsList.startsWith('{')) {
+    return [request];
+  }
+
   const params = new Map<string, unknown>([
     ['payload', request.payload],
     ['config', request.config],

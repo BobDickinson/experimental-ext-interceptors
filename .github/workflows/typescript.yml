@@ -33,6 +33,7 @@ jobs:
         run: |
           cd typescript/sdk
           npm run build
+          npm run typecheck
       - name: Run ESLint
         run: |
           cd typescript/sdk

@@ -1,10 +1,11 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
 
 import { describe, it, expect } from 'vitest';
+import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { InterceptionEvents } from '../protocol/constants.js';
 import { validationSuccess } from '../protocol/results.js';
 import { listInterceptors, invokeInterceptor } from '../client/client-extensions.js';
-import { collectSupportedEvents } from './capabilities.js';
+import { buildInterceptorsCapability, collectSupportedEvents } from './capabilities.js';
 import { connectInterceptorHost } from '../__tests__/fixtures/hosts.js';
 import type { RegisteredInterceptor } from './register-interceptors.js';
 
@@ -28,24 +29,21 @@ const promptsValidator: RegisteredInterceptor = {
 
 describe('registerInterceptorsOnServer', () => {
   it('advertises capabilities.interceptor from hook events', () => {
-    const events = collectSupportedEvents([
-      toolsValidator.descriptor,
-      promptsValidator.descriptor,
-    ]);
+    const descriptors = [toolsValidator.descriptor, promptsValidator.descriptor];
+    const events = collectSupportedEvents(descriptors);
     expect(events).toContain(InterceptionEvents.ToolsCall);
     expect(events).toContain(InterceptionEvents.PromptsGet);
+
+    const capability = buildInterceptorsCapability(descriptors);
+    expect(capability.supportedEvents).toContain(InterceptionEvents.ToolsCall);
+    expect(capability.supportedEvents).toContain(InterceptionEvents.PromptsGet);
   });
 
   it('lists and filters by event', async () => {
-    const { client, server, close } = await connectInterceptorHost([
+    const { client, close } = await connectInterceptorHost([
       toolsValidator,
       promptsValidator,
     ]);
-
-    type Caps = { interceptor?: { supportedEvents: string[] } };
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-    const caps = server.getCapabilities() as Caps;
-    expect(caps.interceptor?.supportedEvents).toContain(InterceptionEvents.ToolsCall);
 
     const all = await listInterceptors(client);
     expect(all.interceptors).toHaveLength(2);
@@ -86,7 +84,7 @@ describe('registerInterceptorsOnServer', () => {
     await close();
   });
 
-  it('invoke throws when interceptor name is unknown', async () => {
+  it('invoke throws -32602 when interceptor name is unknown', async () => {
     const { client, close } = await connectInterceptorHost([toolsValidator]);
 
     await expect(
@@ -96,7 +94,7 @@ describe('registerInterceptorsOnServer', () => {
         phase: 'request',
         payload: {},
       }),
-    ).rejects.toThrow(/not found/i);
+    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams, message: /not found/i });
 
     await close();
   });
