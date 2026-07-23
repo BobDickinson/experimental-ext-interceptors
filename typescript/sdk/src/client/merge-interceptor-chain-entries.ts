@@ -2,7 +2,7 @@
 
 import type { Interceptor } from '../protocol/types.js';
 import { DuplicateInterceptorNameError } from '../protocol/errors.js';
-import { listInterceptors } from './client-extensions.js';
+import { listAllInterceptors } from './client-extensions.js';
 import type {
   InterceptorChainEntry,
   InterceptorChainHost,
@@ -26,7 +26,7 @@ export async function listInterceptorChainEntries(
         return [] as InterceptorChainEntry[];
       }
       const label = hostLabel(host, i);
-      const listed = await listInterceptors(host.client, listParams);
+      const listed = await listAllInterceptors(host.client, listParams);
       return listed.interceptors.map((descriptor) => ({
         descriptor,
         client: host.client,

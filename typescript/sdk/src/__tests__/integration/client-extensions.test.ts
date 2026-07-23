@@ -6,9 +6,15 @@ import { validationSuccess } from '../../protocol/results.js';
 import {
   executeInterceptorChainOnClient,
   invokeInterceptor,
+  listAllInterceptors,
   listInterceptors,
 } from '../../client/client-extensions.js';
 import { connectInterceptorHost } from '../fixtures/hosts.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { ListInterceptorsRequestSchema } from '../../protocol/zod-schemas.js';
+import type { Interceptor } from '../../protocol/types.js';
 
 describe('client extensions integration', () => {
   it('lists and invokes interceptors over InMemoryTransport', async () => {
@@ -100,5 +106,43 @@ describe('client extensions integration', () => {
 
     expect(chain.status).toBe('validation_failed');
     await close();
+  });
+
+  it('listAllInterceptors drains every page from a paginating host', async () => {
+    const pageOne: Interceptor[] = [
+      {
+        name: 'page1-validator',
+        type: 'validation',
+        hooks: [{ events: [InterceptionEvents.ToolsCall], phase: 'request' }],
+      },
+    ];
+    const pageTwo: Interceptor[] = [
+      {
+        name: 'page2-validator',
+        type: 'validation',
+        hooks: [{ events: [InterceptionEvents.ToolsCall], phase: 'request' }],
+      },
+    ];
+
+    const server = new Server(
+      { name: 'paginating-host', version: '0.0.0' },
+      { capabilities: {} },
+    );
+    server.setRequestHandler(ListInterceptorsRequestSchema, (request) => {
+      const cursor = (request.params as { cursor?: string } | undefined)?.cursor;
+      return cursor === 'page-2'
+        ? { interceptors: pageTwo }
+        : { interceptors: pageOne, nextCursor: 'page-2' };
+    });
+
+    const client = new Client({ name: 'test-client', version: '0.0.0' }, { capabilities: {} });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const all = await listAllInterceptors(client);
+    expect(all.interceptors.map((i) => i.name)).toEqual(['page1-validator', 'page2-validator']);
+    expect(all.nextCursor).toBeUndefined();
+
+    await Promise.all([client.close(), server.close()]);
   });
 });

@@ -77,7 +77,9 @@ export { resolvePriority } from './protocol/resolve-priority.js';
 export {
   executeInterceptorChainOnClient,
   invokeInterceptor,
+  listAllInterceptors,
   listInterceptors,
+  type InterceptorRequestOptions,
 } from './client/client-extensions.js';
 
 export { executeInterceptorChainOnClients } from './client/execute-interceptor-chain-on-clients.js';

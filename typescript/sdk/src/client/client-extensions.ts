@@ -39,6 +39,31 @@ export async function listInterceptors(
   );
 }
 
+/**
+ * Drains every page of `interceptors/list` from a host. Use this instead of a
+ * single {@link listInterceptors} call wherever the full set matters (chain
+ * discovery, routing) — a paginating host would otherwise be silently
+ * truncated to its first page.
+ */
+export async function listAllInterceptors(
+  client: Client,
+  params?: Omit<ListInterceptorsRequestParams, 'cursor'>,
+  options?: InterceptorRequestOptions,
+): Promise<ListInterceptorsResult> {
+  const interceptors: ListInterceptorsResult['interceptors'] = [];
+  let cursor: string | undefined;
+  do {
+    const page: ListInterceptorsResult = await listInterceptors(
+      client,
+      cursor ? { ...(params ?? {}), cursor } : params,
+      options,
+    );
+    interceptors.push(...page.interceptors);
+    cursor = page.nextCursor;
+  } while (cursor);
+  return { interceptors };
+}
+
 export async function invokeInterceptor(
   client: Client,
   params: InvokeInterceptorRequestParams,

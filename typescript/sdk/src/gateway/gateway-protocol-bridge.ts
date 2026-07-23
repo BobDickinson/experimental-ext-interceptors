@@ -3,8 +3,9 @@
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
-import { invokeInterceptor, listInterceptors } from '../client/client-extensions.js';
+import { invokeInterceptor, listAllInterceptors } from '../client/client-extensions.js';
 import { InterceptorExtensionCapabilityKey } from '../protocol/constants.js';
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import {
   InvokeInterceptorRequestSchema,
   ListInterceptorsRequestSchema,
@@ -60,10 +61,15 @@ export class GatewayInterceptorProtocolBridge {
 
     server.setRequestHandler(ListInterceptorsRequestSchema, async (request) => {
       const params = request.params as ListInterceptorsRequestParams | undefined;
-      const aggregated: Interceptor[] = [];
+      if (params?.cursor != null) {
+        // The bridge aggregates every host page into one response and never
+        // mints a cursor, so any incoming cursor is stale/foreign.
+        throw new McpError(ErrorCode.InvalidParams, 'Unknown interceptors/list cursor');
+      }
 
+      const aggregated: Interceptor[] = [];
       for (const client of this.interceptorClients) {
-        const result = await listInterceptors(client, params);
+        const result = await listAllInterceptors(client, { event: params?.event });
         aggregated.push(...result.interceptors);
       }
 
@@ -90,14 +96,21 @@ export class GatewayInterceptorProtocolBridge {
     if (!this.routingBuild) {
       this.routingBuild = this.buildRoutingTable();
     }
-    await this.routingBuild;
+    try {
+      await this.routingBuild;
+    } catch (err) {
+      // Drop the failed build so a transient host error (e.g. restart blip)
+      // does not poison every subsequent invoke with the same rejection.
+      this.routingBuild = undefined;
+      throw err;
+    }
     return this.clientByInterceptorName ?? new Map();
   }
 
   private async buildRoutingTable(): Promise<void> {
     const map = new Map<string, Client>();
     for (const client of this.interceptorClients) {
-      const listed = await listInterceptors(client);
+      const listed = await listAllInterceptors(client);
       for (const descriptor of listed.interceptors) {
         if (!map.has(descriptor.name)) {
           map.set(descriptor.name, client);
