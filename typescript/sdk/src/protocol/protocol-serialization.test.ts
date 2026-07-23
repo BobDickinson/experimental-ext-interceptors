@@ -47,14 +47,14 @@ describe('protocol wire shapes (Zod round-trip)', () => {
     expect(parsed.priorityHint).toEqual({ request: -1000, response: 1000 });
   });
 
-  it('normalizes C# mode "active" to enforce when parsing Interceptor', () => {
+  it('normalizes legacy mode "enforce" to active when parsing Interceptor', () => {
     const parsed = InterceptorSchema.parse({
-      name: 'from-csharp',
+      name: 'legacy-host',
       type: 'validation',
       hooks: [{ events: ['tools/call'], phase: 'request' }],
-      mode: 'active',
+      mode: 'enforce',
     });
-    expect(parsed.mode).toBe('enforce');
+    expect(parsed.mode).toBe('active');
   });
 
   it('Interceptor omits unset optional fields in JSON', () => {

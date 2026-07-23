@@ -239,7 +239,7 @@ describe('executeInterceptorChain', () => {
     expect(responseOrder).toEqual(['b', 'a']);
   });
 
-  it('aborts on validation error in enforce mode', async () => {
+  it('aborts on validation error in active mode', async () => {
     const result = await runChain(
       [
         createEntry('strict', 'validation', () =>

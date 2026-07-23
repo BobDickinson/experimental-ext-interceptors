@@ -66,7 +66,7 @@ Per SEP-2624 (with terminology clarified for this SDK):
 - **Chain execution** calls **`interceptors/list`** on one or more interceptor hosts, then **`interceptor/invoke`** on the host that registered each interceptor, following the SEP trust-boundary-aware ordering:
   - **Request (sending):** mutations (sequential by ascending `priorityHint`, name tie-break) → validations (parallel) → sinks (fire-and-forget).
   - **Response (receiving):** validations (parallel) → sinks (fire-and-forget) → mutations (sequential).
-- **`mode`:** `enforce` vs `audit` (shadow validation / mutation). **`failOpen`:** whether failures allow the message to proceed (per SEP rules).
+- **`mode`:** `active` vs `audit` (shadow validation / mutation). **`failOpen`:** whether failures allow the message to proceed (per SEP rules).
 
 If the SEP text conflicts with itself, follow **normative** sections of [`docs/sep.md`](../../docs/sep.md) for wire methods and payloads. Where the SEP is silent or ambiguous, match behavior of the **C# reference** (e.g. **`interceptors/list`**, not `interceptor/list`).
 
@@ -144,19 +144,15 @@ Build: `tsc -p tsconfig.build.json` → `dist/`; lint uses `tsconfig.eslint.json
 
 ### 4.3.1 Differences from the C# SDK (intentional)
 
-#### Interceptor `mode`: `enforce` (TypeScript / SEP) vs `active` (C#)
+#### Interceptor `mode`: `active` (SEP / TypeScript / C#)
 
 | | Wire / API value | Meaning |
 |---|------------------|--------|
-| **SEP-2624** | `enforce` \| `audit` | `enforce` = normal blocking and mutation application; `audit` = shadow / non-blocking |
-| **C# Interceptor SDK** | `active` \| `audit` | `InterceptorMode.Active` serializes as `"active"` (same semantics as SEP `enforce`) |
-| **TypeScript SDK** | `enforce` \| `audit` | Matches the SEP on the wire and in `InterceptorMode` |
+| **SEP-2624** | `active` \| `audit` | `active` = normal blocking and mutation application; `audit` = shadow / non-blocking |
+| **C# Interceptor SDK** | `active` \| `audit` | `InterceptorMode.Active` serializes as `"active"` |
+| **TypeScript SDK** | `active` \| `audit` | Matches the SEP and C# on the wire and in `InterceptorMode` |
 
-**Why TypeScript uses `enforce`:** The normative spec ([`docs/sep.md`](../../docs/sep.md)) names the default mode **`enforce`**. The in-repo C# SDK predates or diverges from that string and uses **`active`** instead. TypeScript defaults to **SEP-shaped** protocol types in this package (same rationale as `capabilities.interceptor` vs C# `extensions["interceptors"]`).
-
-**Interop:** When parsing descriptors from a C# interceptor host, Zod accepts **`mode: "active"`** and normalizes it to **`enforce`** before chain execution. New TypeScript hosts and samples should emit **`enforce`** or omit `mode` (orchestrator treats omitted as enforcing). Do not emit `active` from TypeScript servers.
-
-**C# team:** Aligning C# to `enforce` would match the SEP and this SDK; until then, mixed deployments should expect TS clients to accept `active` on read only.
+**Interop:** Earlier drafts of this SDK used `enforce` as the canonical value; Zod still accepts **`mode: "enforce"`** on read and normalizes it to **`active`** before chain execution. New TypeScript hosts and samples should emit **`active`** or omit `mode` (orchestrator treats omitted as active). Do not emit `enforce` from TypeScript servers.
 
 #### `priorityHint` per phase (SEP) vs scalar only (C#)
 

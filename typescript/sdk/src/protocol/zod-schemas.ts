@@ -8,10 +8,10 @@ import { InterceptorRequestMethods } from './constants.js';
 
 const InterceptorPhaseSchema = z.enum(['request', 'response']);
 const InterceptorTypeSchema = z.enum(['validation', 'mutation', 'sink']);
-/** Accept C# SDK `"active"` on the wire and normalize to SEP `"enforce"`. */
+/** Accept legacy `"enforce"` on the wire and normalize to SEP `"active"`. */
 const InterceptorModeSchema = z
-  .enum(['enforce', 'audit', 'active'])
-  .transform((mode): 'enforce' | 'audit' => (mode === 'active' ? 'enforce' : mode));
+  .enum(['active', 'audit', 'enforce'])
+  .transform((mode): 'active' | 'audit' => (mode === 'enforce' ? 'active' : mode));
 const ValidationSeveritySchema = z.enum(['info', 'warn', 'error']);
 
 const PriorityHintByPhaseSchema = z.object({

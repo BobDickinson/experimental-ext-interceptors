@@ -7,7 +7,7 @@ export type InterceptorType = 'validation' | 'mutation' | 'sink';
 export type InterceptorPhase = 'request' | 'response';
 
 /** SEP wire value for normal blocking / transforming behavior (default when omitted). */
-export type InterceptorMode = 'enforce' | 'audit';
+export type InterceptorMode = 'active' | 'audit';
 
 export type ValidationSeverity = 'info' | 'warn' | 'error';
 
