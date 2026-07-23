@@ -44,13 +44,17 @@ export async function invokeInterceptor(
   params: InvokeInterceptorRequestParams,
   options?: InterceptorRequestOptions,
 ): Promise<InterceptorResult> {
+  // The host enforces params.timeoutMs and reports SEP -32000; the wire timeout
+  // is a backstop with headroom so the host's richer error wins the race.
+  const wireTimeout =
+    options?.timeoutMs ?? (params.timeoutMs != null ? params.timeoutMs + 1_000 : undefined);
   return client.request(
     {
       method: InterceptorRequestMethods.InterceptorInvoke,
       params: params as unknown as Record<string, unknown>,
     },
     InterceptorResultSchema,
-    { signal: options?.signal, timeout: options?.timeoutMs ?? params.timeoutMs },
+    { signal: options?.signal, timeout: wireTimeout },
   );
 }
 

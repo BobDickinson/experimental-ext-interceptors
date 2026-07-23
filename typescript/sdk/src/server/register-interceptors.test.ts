@@ -136,4 +136,34 @@ describe('registerInterceptorsOnServer', () => {
 
     await close();
   });
+
+  it('invoke times out handlers that ignore the abort signal (SEP -32000)', async () => {
+    const stubborn: RegisteredInterceptor = {
+      descriptor: {
+        name: 'stubborn',
+        type: 'validation',
+        hooks: [{ events: [InterceptionEvents.All], phase: 'request' }],
+      },
+      handler: async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+        return validationSuccess('request');
+      },
+    };
+
+    const { client, close } = await connectInterceptorHost([stubborn]);
+
+    const started = Date.now();
+    await expect(
+      invokeInterceptor(client, {
+        name: 'stubborn',
+        event: InterceptionEvents.ToolsCall,
+        phase: 'request',
+        payload: {},
+        timeoutMs: 40,
+      }),
+    ).rejects.toMatchObject({ code: -32000, message: /timed out after 40ms/i });
+    expect(Date.now() - started).toBeLessThan(800);
+
+    await close();
+  });
 });

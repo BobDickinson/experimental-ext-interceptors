@@ -50,10 +50,7 @@ export async function executeInterceptorChainOnClients(
         throw new Error(`No host registered for interceptor '${invokeParams.name}'`);
       }
       try {
-        return await invokeInterceptor(client, invokeParams, {
-          signal: invokeSignal,
-          timeoutMs: invokeParams.timeoutMs,
-        });
+        return await invokeInterceptor(client, invokeParams, { signal: invokeSignal });
       } catch (err) {
         // The MCP SDK wraps abort reasons in McpError; surface the original
         // abort/timeout so the orchestrator can classify it.

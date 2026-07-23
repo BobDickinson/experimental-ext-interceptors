@@ -14,7 +14,7 @@ import {
   ListInterceptorsRequestSchema,
   ListInterceptorsResultSchema,
 } from '../protocol/zod-schemas.js';
-import { interceptorNotFoundError } from '../protocol/mcp-errors.js';
+import { interceptorNotFoundError, interceptorTimeoutError } from '../protocol/mcp-errors.js';
 import { registerInterceptorCapabilities } from './capabilities.js';
 
 export type InterceptorHandler = (
@@ -76,18 +76,42 @@ export function registerInterceptorsOnServer(
       params.timeoutMs != null ? AbortSignal.timeout(params.timeoutMs) : undefined;
 
     try {
-      const result = await entry.handler(params, signal);
+      // Race the handler against the timeout signal so a handler that ignores
+      // the signal cannot hold the request past timeoutMs.
+      const result = await raceWithSignal(Promise.resolve(entry.handler(params, signal)), signal);
       result.interceptor = entry.descriptor.name;
       result.phase = params.phase;
       return result as unknown as Record<string, unknown>;
     } catch (err) {
-      if (signal?.aborted) {
-        throw new Error(
-          `Interceptor '${params.name}' timed out after ${params.timeoutMs}ms`,
-        );
+      if (signal?.aborted && params.timeoutMs != null) {
+        throw interceptorTimeoutError(params.name, params.timeoutMs, params.phase);
       }
       throw err;
     }
+  });
+}
+
+function raceWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    if (signal.aborted) {
+      onAbort();
+    } else {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (err) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
   });
 }
 
