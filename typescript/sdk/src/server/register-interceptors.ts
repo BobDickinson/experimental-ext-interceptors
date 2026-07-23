@@ -28,7 +28,7 @@ export interface RegisteredInterceptor {
 }
 
 export interface RegisterInterceptorsOptions {
-  /** When true (default), merge `capabilities.interceptor` from registered hooks. */
+  /** When true (default), merge the interceptors extensions capability from registered hooks. */
   registerCapabilities?: boolean;
 }
 

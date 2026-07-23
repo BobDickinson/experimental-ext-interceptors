@@ -31,15 +31,17 @@ const InterceptorsListResultSchema = ResultSchema.extend({
 });
 
 describe('MCP SDK v1 server wiring', () => {
-  it('handles interceptors/list; v1 client omits interceptor from parsed initialize capabilities', async () => {
+  it('handles interceptors/list; extensions capability survives v1 client initialize parsing', async () => {
     const server = new Server(
       { name: 'spike-interceptor-server', version: '0.0.0' },
       { capabilities: {} },
     );
 
     server.registerCapabilities({
-      interceptor: {
-        supportedEvents: ['tools/call'],
+      extensions: {
+        'io.modelcontextprotocol/interceptors': {
+          supportedEvents: ['tools/call'],
+        },
       },
     } as ServerCapabilities);
 
@@ -58,12 +60,15 @@ describe('MCP SDK v1 server wiring', () => {
       client.connect(clientTransport),
     ]);
 
-    // v1 Client parses initialize with ServerCapabilitiesSchema (no `interceptor` field).
-    type CapsWithInterceptor = ServerCapabilities & {
-      interceptor?: { supportedEvents: string[] };
-    };
-    const caps = client.getServerCapabilities() as CapsWithInterceptor | undefined;
-    expect(caps?.interceptor).toBeUndefined();
+    // v1 ServerCapabilitiesSchema has a typed `extensions` record, so the SEP-2133
+    // extensions capability round-trips through the stock v1 Client (a top-level
+    // `interceptor` key would be stripped by initialize parsing).
+    const caps = client.getServerCapabilities() as
+      | (ServerCapabilities & { extensions?: Record<string, { supportedEvents?: string[] }> })
+      | undefined;
+    expect(caps?.extensions?.['io.modelcontextprotocol/interceptors']?.supportedEvents).toEqual([
+      'tools/call',
+    ]);
 
     const listResult = await client.request(
       { method: 'interceptors/list', params: {} },

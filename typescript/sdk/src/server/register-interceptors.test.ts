@@ -28,7 +28,7 @@ const promptsValidator: RegisteredInterceptor = {
 };
 
 describe('registerInterceptorsOnServer', () => {
-  it('advertises capabilities.interceptor from hook events', () => {
+  it('advertises the interceptors extensions capability from hook events', () => {
     const descriptors = [toolsValidator.descriptor, promptsValidator.descriptor];
     const events = collectSupportedEvents(descriptors);
     expect(events).toContain(InterceptionEvents.ToolsCall);

@@ -45,7 +45,7 @@ Implementation targets **v1** today while following **v2-shaped** module boundar
 
 ### 1.4 Capability advertisement (TypeScript default)
 
-**Interceptor hosts** advertise support per the SEP: **`capabilities.interceptor`** with **`supportedEvents`**. The C# SDK in this repo uses **`ServerCapabilities.Extensions["interceptors"]`** instead; that difference is **documented for interoperability** (see §3) but **not** the TypeScript default wire shape.
+**Interceptor hosts** advertise support per the SEP: **`capabilities.extensions["io.modelcontextprotocol/interceptors"]`** with **`supportedEvents`** (SEP-2133 extensions format). The C# SDK in this repo advertises the same key, so the two SDKs interoperate directly (see §3).
 
 ---
 
@@ -56,7 +56,7 @@ Per SEP-2624 (with terminology clarified for this SDK):
 ### 2.1 Primitive vs hosts
 
 - An **interceptor** is an MCP **primitive** (governance logic for context operations)—analogous to tools, resources, and prompts, but with a different invocation model (see SEP).
-- Interceptors are **discoverable** and **invocable** via JSON-RPC (`interceptors/list`, `interceptor/invoke`) on an **interceptor host**: an MCP-protocol **endpoint** that speaks the normal MCP session stack (`initialize`, JSON-RPC, transports) and advertises **`capabilities.interceptor`**. The SEP says interceptors are “hosted on MCP servers”; here **interceptor host** means that protocol role without implying the host is your **application MCP server**.
+- Interceptors are **discoverable** and **invocable** via JSON-RPC (`interceptors/list`, `interceptor/invoke`) on an **interceptor host**: an MCP-protocol **endpoint** that speaks the normal MCP session stack (`initialize`, JSON-RPC, transports) and advertises **`capabilities.extensions["io.modelcontextprotocol/interceptors"]`**. The SEP says interceptors are “hosted on MCP servers”; here **interceptor host** means that protocol role without implying the host is your **application MCP server**.
 - An **application (backend) MCP server** is the server clients usually connect to for **tools**, **resources**, **prompts**, and related lifecycle events. It is a **different role** from an interceptor host. Deployments often use **client → interceptor host(s) → backend server** (see C# **`McpInterceptorGateway`** and SEP sidecar/proxy narrative). An interceptor host may expose **only** interceptor methods plus minimal MCP plumbing, or colocate interceptors with a backend—still two concerns: **governance primitives** vs **agent-facing capabilities**.
 - **Validators** return pass/fail with severity and messages. **Mutators** return possibly modified payloads. **Sinks** are observe-only and non-blocking; the C# SDK treats **`sink`** as a first-class `InterceptorType`.
 - Interceptors attach to **lifecycle events** (e.g. `tools/call`, `resources/read`, `prompts/get`, `llm/completion`) and a **phase** (`request`, `response`, or both).
@@ -83,21 +83,23 @@ If the SEP text conflicts with itself, follow **normative** sections of [`docs/s
 
 ### 3.2 Interceptor host capability (`initialize`)
 
-Per the SEP, interceptor hosts include:
+Per the SEP (SEP-2133 extensions format), interceptor hosts include:
 
 ```json
 {
   "capabilities": {
-    "interceptor": {
-      "supportedEvents": ["tools/call", "..."]
+    "extensions": {
+      "io.modelcontextprotocol/interceptors": {
+        "supportedEvents": ["tools/call", "..."]
+      }
     }
   }
 }
 ```
 
-**C# interoperability:** The C# Interceptor SDK advertises the same logical data under **`capabilities.extensions["interceptors"]`** via the C# MCP SDK extension API. Mixed deployments may need dual-read logic or bridges; see package **README** (Capabilities section).
+The key is exported as **`InterceptorExtensionCapabilityKey`**. The C# Interceptor SDK advertises the same shape under the same key, so mixed deployments interoperate without dual-read logic.
 
-**Discovery with v1 `@modelcontextprotocol/sdk` Client:** The server should set capability via `registerCapabilities` (see §5). The stock v1 **`Client`** parses `initialize` with `ServerCapabilitiesSchema`, which does **not** include `interceptor`, so **`getServerCapabilities().interceptor` is undefined** even when the server advertised it on the wire. Clients using this interceptor SDK should treat **`interceptors/list`** (or handling a standard JSON-RPC error when unsupported) as the reliable discovery path—not typed `interceptor` on parsed server capabilities.
+**Discovery with v1 `@modelcontextprotocol/sdk` Client:** The server should set capability via `registerCapabilities` (see §5). The stock v1 **`Client`** parses `initialize` with `ServerCapabilitiesSchema`, which includes a typed **`extensions`** record, so **`getServerCapabilities().extensions["io.modelcontextprotocol/interceptors"]`** survives parsing and is a reliable discovery path. **`interceptors/list`** (or handling a standard JSON-RPC error when unsupported) remains a valid fallback.
 
 ---
 
@@ -225,19 +227,22 @@ Apply the same pattern for **`interceptor/invoke`** with params and result schem
 
 Implement registration in **`src/server/register-interceptors.ts`** only.
 
-### 5.3 Advertising `capabilities.interceptor`
+### 5.3 Advertising the interceptors extensions capability
 
 ```ts
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types';
+import { InterceptorExtensionCapabilityKey } from 'mcp-ext-interceptors';
 
 server.registerCapabilities({
-  interceptor: { supportedEvents: ['tools/call'] },
+  extensions: {
+    [InterceptorExtensionCapabilityKey]: { supportedEvents: ['tools/call'] },
+  },
 } as ServerCapabilities);
 ```
 
-`mergeCapabilities` shallow-merges into internal server state; **`initialize`** returns `getCapabilities()` unchanged, so **`interceptor` appears on the wire**. The v1 TypeScript type for `ServerCapabilities` omits `interceptor`; confine the assertion to **`src/server/capabilities.ts`**.
+`mergeCapabilities` shallow-merges into internal server state (the `extensions` record merges key-wise, so other extensions are preserved); **`initialize`** returns `getCapabilities()` unchanged, so the capability appears on the wire. Confine the `ServerCapabilities` assertion to **`src/server/capabilities.ts`**.
 
-Do **not** use `extensions.interceptors` as the default—that matches C# but not the SEP shape chosen for TypeScript.
+Do **not** advertise a top-level `capabilities.interceptor`—earlier drafts used that key, but it is not the SEP shape and the stock v1 Client strips it during `initialize` parsing.
 
 ### 5.4 Client extension requests
 
@@ -347,7 +352,7 @@ All runnable examples import `../../../dist/index.js` after `npm run build`. Roo
 
 - Build an **interceptor host** using the MCP SDK’s `Server` / `McpServer`—a real MCP protocol endpoint, typically **not** the same process or role as the application backend that serves tools/resources.
 - In-process interceptor registry (name → handler).
-- **`registerInterceptorsOnServer(server, interceptors, options?)`**: installs wire handlers on that host, merges **`capabilities.interceptor`** from registered hooks’ events.
+- **`registerInterceptorsOnServer(server, interceptors, options?)`**: installs wire handlers on that host, merges the interceptors extensions capability from registered hooks’ events.
 
 ### 7.4 Gateway
 
@@ -371,7 +376,7 @@ Callers supply **already-connected** `Client` instances (stdio spawn is sample r
 | Chain semantics (order, audit, failOpen, timeout) | Yes | Yes | |
 | Multi-host chain merge | Yes (see §11) | Yes | `executeInterceptorChainOnClients` |
 | Client list / invoke / executeChain | Yes | Yes | |
-| `capabilities.interceptor` on initialize (SEP) | No (`extensions["interceptors"]`) | Yes | TS default wire shape |
+| Extensions capability on initialize (SEP) | Yes (`extensions["io.modelcontextprotocol/interceptors"]`) | Yes | Same wire shape in both SDKs |
 | `InterceptingMcpClient` operations | Yes | Yes | API parity; E2E tests mainly `tools/call` |
 | Server registration ergonomics | Yes (`IMcpServerBuilder`) | Yes | `setRequestHandler`, not message filter |
 | Reflection-style interceptors | Yes | Yes | `defineInterceptor` |
@@ -413,7 +418,7 @@ Integration and gateway tests use these helpers so registration and capability s
 | `client/client-extensions.ts` | — | `listInterceptors` / `invokeInterceptor` / `executeInterceptorChainOnClient` against fixture host | (orchestrator + client extensions) |
 | `client/intercepting-client.ts` | — | E2E: `tools/call` request mutation reaches backend (expand to other operations optional) | `McpInterceptorGatewayTests.cs` (overlapping scenarios) |
 | `server/register-interceptors.ts` | Registry → handler dispatch, error paths | `interceptors/list` filter by `event`; `interceptor/invoke` returns correct polymorphic result | — |
-| `server/capabilities.ts` | `supportedEvents` derived from registered hooks | `initialize` / `getCapabilities()` includes `capabilities.interceptor` on wire | — |
+| `server/capabilities.ts` | `supportedEvents` derived from registered hooks | `initialize` / `getCapabilities()` includes the extensions capability on wire | — |
 | `server/reflection.ts` | Metadata extraction, invalid registration | Invoke reflected handler over transport | `ReflectionMcpServerInterceptorTests.cs` |
 | `client/execute-interceptor-chain-on-clients.ts` | Merge, duplicate-name policy | Multi-host priority and routing | — |
 | `gateway/` | `proxy-request.ts` chain wrapper | 13 tests in `mcp-interceptor-gateway.test.ts` | Subset of `GatewayComponentsTests.cs`, `McpInterceptorGatewayTests.cs` |
@@ -424,7 +429,7 @@ Integration and gateway tests use these helpers so registration and capability s
 
 **Client:** list returns registered interceptors; invoke returns each result type; executeChain applies order and aggregates failures; extensions send correct JSON-RPC method names.
 
-**Server:** host advertises `capabilities.interceptor`; list respects optional `event` filter; invoke dispatches to the right handler; unknown name / bad phase errors.
+**Server:** host advertises the interceptors extensions capability; list respects optional `event` filter; invoke dispatches to the right handler; unknown name / bad phase errors.
 
 **Integration (client ↔ host):** connect with `InMemoryTransport`; full list + invoke for at least one validator and one mutator.
 

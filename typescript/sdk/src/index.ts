@@ -12,6 +12,7 @@
 export {
   InterceptorRequestMethods,
   InterceptionEvents,
+  InterceptorExtensionCapabilityKey,
 } from './protocol/constants.js';
 
 export type {

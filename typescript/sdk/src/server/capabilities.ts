@@ -2,7 +2,7 @@
 
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
-import { InterceptionEvents } from '../protocol/constants.js';
+import { InterceptionEvents, InterceptorExtensionCapabilityKey } from '../protocol/constants.js';
 import type { Interceptor, InterceptorsCapability } from '../protocol/types.js';
 
 export function collectSupportedEvents(interceptors: Interceptor[]): string[] {
@@ -24,13 +24,15 @@ export function buildInterceptorsCapability(interceptors: Interceptor[]): Interc
   };
 }
 
-/** Merge SEP `capabilities.interceptor` onto a v1 MCP server. */
+/** Merge SEP `capabilities.extensions["io.modelcontextprotocol/interceptors"]` onto a v1 MCP server. */
 export function registerInterceptorCapabilities(
   server: Server,
   interceptors: Interceptor[],
 ): void {
   const capability = buildInterceptorsCapability(interceptors);
   server.registerCapabilities({
-    interceptor: capability,
+    extensions: {
+      [InterceptorExtensionCapabilityKey]: capability,
+    },
   } as ServerCapabilities);
 }

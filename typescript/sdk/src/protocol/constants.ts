@@ -8,6 +8,12 @@ export const InterceptorRequestMethods = {
   InterceptorInvoke: 'interceptor/invoke',
 } as const;
 
+/**
+ * SEP-2133 extensions key under which interceptor hosts advertise support:
+ * `capabilities.extensions["io.modelcontextprotocol/interceptors"]`.
+ */
+export const InterceptorExtensionCapabilityKey = 'io.modelcontextprotocol/interceptors';
+
 /** Well-known lifecycle event identifiers (SEP-2624). */
 export const InterceptionEvents = {
   ToolsList: 'tools/list',

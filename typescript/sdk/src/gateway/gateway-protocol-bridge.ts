@@ -4,6 +4,7 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { invokeInterceptor, listInterceptors } from '../client/client-extensions.js';
+import { InterceptorExtensionCapabilityKey } from '../protocol/constants.js';
 import {
   InvokeInterceptorRequestSchema,
   ListInterceptorsRequestSchema,
@@ -18,9 +19,9 @@ import { interceptorNotFoundError, isInvalidParamsError } from '../protocol/mcp-
 
 function readInterceptorCapability(client: Client): InterceptorsCapability | undefined {
   const caps = client.getServerCapabilities() as ServerCapabilities & {
-    interceptor?: InterceptorsCapability;
+    extensions?: Record<string, unknown>;
   };
-  return caps?.interceptor;
+  return caps?.extensions?.[InterceptorExtensionCapabilityKey] as InterceptorsCapability | undefined;
 }
 
 export class GatewayInterceptorProtocolBridge {
@@ -49,8 +50,10 @@ export class GatewayInterceptorProtocolBridge {
 
     if (anyCapability) {
       server.registerCapabilities({
-        interceptor: {
-          supportedEvents: [...allEvents],
+        extensions: {
+          [InterceptorExtensionCapabilityKey]: {
+            supportedEvents: [...allEvents],
+          },
         },
       } as ServerCapabilities);
     }

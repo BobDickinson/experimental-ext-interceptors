@@ -155,9 +155,9 @@ Connecting clients use the proxy as the backend; the parent process spawns inter
 
 ## Capabilities
 
-Interceptor hosts advertise SEP **`capabilities.interceptor`** with `supportedEvents` (merged automatically by `registerInterceptorsOnServer`).
+Interceptor hosts advertise SEP **`capabilities.extensions["io.modelcontextprotocol/interceptors"]`** with `supportedEvents` (merged automatically by `registerInterceptorsOnServer`; key exported as `InterceptorExtensionCapabilityKey`).
 
-The C# SDK in this repository uses `capabilities.extensions["interceptors"]` instead. Mixed deployments may need dual-read logic.
+The C# SDK in this repository advertises the same key, so mixed TS/C# deployments interoperate directly.
 
 ## Examples
 
