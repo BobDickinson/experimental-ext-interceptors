@@ -15,8 +15,12 @@ export class GatewayResolvedInterceptorClients {
   }
 
   async dispose(): Promise<void> {
-    for (const disposable of this.ownedDisposables) {
-      await disposable.dispose();
+    // Settle every disposable even if one throws so a failing close cannot
+    // leak the remaining owned clients.
+    const settled = await Promise.allSettled(this.ownedDisposables.map((d) => d.dispose()));
+    const failure = settled.find((s): s is PromiseRejectedResult => s.status === 'rejected');
+    if (failure) {
+      throw failure.reason;
     }
   }
 }

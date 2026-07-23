@@ -5,7 +5,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { InterceptorClientTransport } from '../../gateway/mcp-interceptor-server-connection-options.js';
-import { McpError } from '@modelcontextprotocol/sdk/types.js';
+import { McpError, ResourceUpdatedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InterceptionEvents } from '../../protocol/constants.js';
 import { validationFailure, validationSuccess } from '../../protocol/results.js';
 import { listInterceptors } from '../../client/client-extensions.js';
@@ -503,6 +503,66 @@ describe('McpInterceptorGateway', () => {
     await proxy.close();
     await host1.close();
     await host2.close();
+    await backend.close();
+  });
+
+  it('passes requests through when the resolver returns no connections', async () => {
+    const backend = await connectEchoBackend();
+
+    const gateway = new McpInterceptorGateway({
+      backendClient: backend.client,
+      interceptorServerConnectionResolver: () => Promise.resolve([]),
+    });
+
+    const proxy = await connectGatewayProxy(gateway);
+    const tools = await proxy.proxyClient.listTools();
+    expect(tools.tools.map((t) => t.name)).toEqual(['echo']);
+
+    const result = await proxy.proxyClient.callTool({
+      name: 'echo',
+      arguments: { message: 'hi' },
+    });
+    expect(result.content).toBeDefined();
+    expect(backend.lastCall.name).toBe('echo');
+
+    await proxy.close();
+    await backend.close();
+  });
+
+  it('forwards backend resources/updated notifications to proxied subscribers', async () => {
+    const passthrough: RegisteredInterceptor = {
+      descriptor: {
+        name: 'observer',
+        type: 'validation',
+        hooks: [{ events: [InterceptionEvents.ResourcesSubscribe], phase: 'request' }],
+      },
+      handler: (params) => validationSuccess(params.phase),
+    };
+
+    const host = await connectInterceptorHost([passthrough]);
+    const backend = await connectRichBackend();
+
+    const gateway = new McpInterceptorGateway({
+      backendClient: backend.client,
+      interceptorClients: [host.client],
+    });
+
+    const proxy = await connectGatewayProxy(gateway);
+
+    const updated = new Promise<{ uri: string }>((resolve) => {
+      proxy.proxyClient.setNotificationHandler(ResourceUpdatedNotificationSchema, (n) => {
+        resolve({ uri: n.params.uri });
+      });
+    });
+
+    await proxy.proxyClient.subscribeResource({ uri: 'resource://original' });
+    expect(backend.subscription.uri).toBe('resource://original');
+
+    await backend.server.sendResourceUpdated({ uri: 'resource://original' });
+    await expect(updated).resolves.toEqual({ uri: 'resource://original' });
+
+    await proxy.close();
+    await host.close();
     await backend.close();
   });
 });

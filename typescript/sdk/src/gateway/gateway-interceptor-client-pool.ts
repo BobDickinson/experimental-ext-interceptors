@@ -19,34 +19,41 @@ export class GatewayInterceptorClientPool {
     const clients: Client[] = [];
     const owned: Client[] = [];
 
-    for (const connection of connections) {
-      if (!connection.transport) {
-        throw new Error('transport is required on interceptor server connection options');
-      }
+    try {
+      for (const connection of connections) {
+        if (!connection.transport) {
+          throw new Error('transport is required on interceptor server connection options');
+        }
 
-      const connectionId = connection.connectionId?.trim();
-      if (!connectionId) {
-        const client = await connectInterceptorClient(connection, signal);
-        clients.push(client);
-        owned.push(client);
-        continue;
-      }
+        const connectionId = connection.connectionId?.trim();
+        if (!connectionId) {
+          const client = await connectInterceptorClient(connection, signal);
+          clients.push(client);
+          owned.push(client);
+          continue;
+        }
 
-      let pending = this.cache.get(connectionId);
-      if (!pending) {
-        pending = connectInterceptorClient(connection, signal);
-        this.cache.set(connectionId, pending);
-        pending.catch(() => {
+        let pending = this.cache.get(connectionId);
+        if (!pending) {
+          pending = connectInterceptorClient(connection, signal);
+          this.cache.set(connectionId, pending);
+          pending.catch(() => {
+            this.cache.delete(connectionId);
+          });
+        }
+
+        try {
+          clients.push(await pending);
+        } catch (error) {
           this.cache.delete(connectionId);
-        });
+          throw error;
+        }
       }
-
-      try {
-        clients.push(await pending);
-      } catch (error) {
-        this.cache.delete(connectionId);
-        throw error;
-      }
+    } catch (error) {
+      // A later connection failed: close the owned clients already connected in
+      // this batch so each failed resolve does not leak live transports.
+      await Promise.allSettled(owned.map((client) => client.close()));
+      throw error;
     }
 
     return new GatewayResolvedInterceptorClients(

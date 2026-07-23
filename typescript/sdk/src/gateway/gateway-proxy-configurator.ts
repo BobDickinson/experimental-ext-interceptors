@@ -20,6 +20,7 @@ import {
   type ListPromptsRequest,
   type ListResourcesRequest,
   type ListToolsRequest,
+  type Progress,
   type ReadResourceRequest,
   type ServerCapabilities,
   type SubscribeRequest,
@@ -147,7 +148,11 @@ export class GatewayProxyConfigurator {
         forward,
       });
     } finally {
-      await resolved.dispose();
+      try {
+        await resolved.dispose();
+      } catch {
+        // A failing per-request client close must not mask the request outcome.
+      }
     }
   }
 
@@ -164,8 +169,10 @@ export class GatewayProxyConfigurator {
       ),
     );
 
-    server.setRequestHandler(CallToolRequestSchema, async (request, extra) =>
-      this.runProxied(
+    server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+      const progressToken = (request.params?._meta as { progressToken?: string | number } | undefined)
+        ?.progressToken;
+      return this.runProxied(
         messageContextFromRequest('tools/call', request.params, extra),
         'tools/call',
         InterceptionEvents.ToolsCall,
@@ -174,11 +181,26 @@ export class GatewayProxyConfigurator {
           this.backend.callTool(
             coerceParams(request, params) as CallToolRequest['params'],
             undefined,
-            { signal: sig },
+            {
+              signal: sig,
+              // Relay backend progress to the proxied caller under its own token.
+              ...(progressToken != null
+                ? {
+                    onprogress: (progress: Progress) => {
+                      void server
+                        .notification({
+                          method: 'notifications/progress',
+                          params: { ...progress, progressToken },
+                        })
+                        .catch(() => {});
+                    },
+                  }
+                : {}),
+            },
           ),
         extra.signal,
-      ),
-    );
+      );
+    });
   }
 
   private configurePrompts(server: Server): void {

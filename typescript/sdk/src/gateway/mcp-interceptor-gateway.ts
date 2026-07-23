@@ -3,8 +3,10 @@
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
+  LoggingMessageNotificationSchema,
   PromptListChangedNotificationSchema,
   ResourceListChangedNotificationSchema,
+  ResourceUpdatedNotificationSchema,
   ToolListChangedNotificationSchema,
   type Implementation,
 } from '@modelcontextprotocol/sdk/types.js';
@@ -203,6 +205,31 @@ export class McpInterceptorGateway {
       });
       this.notificationCleanups.push(() =>
         this.backendClient.removeNotificationHandler('notifications/resources/list_changed'),
+      );
+    }
+
+    if (backendCaps?.resources?.subscribe) {
+      // Without this relay, proxied resources/subscribe would be a silent no-op.
+      this.backendClient.setNotificationHandler(
+        ResourceUpdatedNotificationSchema,
+        async (notification) => {
+          await proxyServer.sendResourceUpdated(notification.params);
+        },
+      );
+      this.notificationCleanups.push(() =>
+        this.backendClient.removeNotificationHandler('notifications/resources/updated'),
+      );
+    }
+
+    if (backendCaps?.logging) {
+      this.backendClient.setNotificationHandler(
+        LoggingMessageNotificationSchema,
+        async (notification) => {
+          await proxyServer.sendLoggingMessage(notification.params);
+        },
+      );
+      this.notificationCleanups.push(() =>
+        this.backendClient.removeNotificationHandler('notifications/message'),
       );
     }
   }
