@@ -2,6 +2,13 @@
 // Use of this source code is governed by a Apache-2.0
 // license that can be found in the LICENSE file.
 
+/**
+ * MCP Interceptors TypeScript SDK
+ *
+ * Implements MCP Interceptors based on SEP-2624:
+ * https://github.com/modelcontextprotocol/modelcontextprotocol/issues/2624
+ */
+
 export {
   InterceptorRequestMethods,
   InterceptionEvents,
