@@ -20,6 +20,8 @@ export type {
   ChainValidationSummary,
   ExecuteChainRequestParams,
   Interceptor,
+  InterceptorOverrides,
+  ChainInterceptorEntry,
   InterceptorChainResult,
   InterceptorChainStatus,
   InterceptorCompatibility,
@@ -55,6 +57,7 @@ export {
 
 export {
   InterceptorHookSchema,
+  InterceptorOverridesSchema,
   InterceptorResultSchema,
   InterceptorSchema,
   ListInterceptorsResultSchema,
@@ -104,6 +107,7 @@ export {
 export {
   collectValidationErrorMessages,
   DuplicateInterceptorNameError,
+  InterceptorOverrideHookError,
   formatValidationFailedChainMessage,
   McpInterceptorChainException,
   McpInterceptorValidationException,

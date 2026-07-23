@@ -50,6 +50,28 @@ export interface Interceptor {
   _meta?: Record<string, unknown>;
 }
 
+/**
+ * Invoker-declared execution policy for one chain entry (SEP-2624 Capability vs
+ * Policy). Fields present here take precedence over the interceptor's declared
+ * defaults. `hooks` may only narrow the declared hooks, never widen them.
+ */
+export interface InterceptorOverrides {
+  failOpen?: boolean;
+  /** Ignored for validation interceptors. */
+  priorityHint?: PriorityHint;
+  mode?: InterceptorMode;
+  /** Per-interceptor timeout; resolved `failOpen` decides whether a timeout blocks. */
+  timeoutMs?: number;
+  /** Subset of the interceptor's declared hooks to invoke it for. */
+  hooks?: InterceptorHook[];
+}
+
+/** One chain entry for the orchestrator: a descriptor plus optional invoker policy. */
+export interface ChainInterceptorEntry {
+  interceptor: Interceptor;
+  overrides?: InterceptorOverrides;
+}
+
 export interface ValidationMessage {
   path?: string;
   message: string;
@@ -136,7 +158,8 @@ export interface ExecuteChainRequestParams {
   payload: unknown;
   /** Optional name filter (wire property: `interceptors`). */
   interceptors?: string[];
-  config?: unknown;
+  /** Per-interceptor configuration, keyed by interceptor name (SEP-2624). */
+  config?: Record<string, Record<string, unknown>>;
   timeoutMs?: number;
   context?: InvokeInterceptorContext;
 }

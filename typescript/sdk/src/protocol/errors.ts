@@ -54,6 +54,20 @@ export class DuplicateInterceptorNameError extends Error {
   }
 }
 
+/**
+ * Thrown when chain-entry `overrides.hooks` widen beyond the interceptor's
+ * declared hooks (SEP-2624: implementations MUST reject widening overrides).
+ */
+export class InterceptorOverrideHookError extends Error {
+  readonly interceptor: string;
+
+  constructor(interceptor: string, detail: string) {
+    super(`Override hooks for interceptor '${interceptor}' widen beyond its declared hooks: ${detail}`);
+    this.name = 'InterceptorOverrideHookError';
+    this.interceptor = interceptor;
+  }
+}
+
 /** Validation messages from chain results where the interceptor reported `valid: false`. */
 export function collectValidationErrorMessages(
   chainResult: InterceptorChainResult,

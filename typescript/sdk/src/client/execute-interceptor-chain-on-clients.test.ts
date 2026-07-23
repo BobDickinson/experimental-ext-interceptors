@@ -100,4 +100,79 @@ describe('executeInterceptorChainOnClients', () => {
     await hostA.close();
     await hostB.close();
   });
+
+  it('returns an empty success chain for an empty host list', async () => {
+    const result = await executeInterceptorChainOnClients([], {
+      event: InterceptionEvents.ToolsCall,
+      phase: 'request',
+      payload: { name: 'echo' },
+    });
+    expect(result.status).toBe('success');
+    expect(result.results).toHaveLength(0);
+  });
+
+  it('enforces chain timeoutMs against a hung interceptor host', async () => {
+    const hung = await connectInterceptorHost([
+      {
+        descriptor: {
+          name: 'hung-validator',
+          type: 'validation',
+          hooks: [{ events: [InterceptionEvents.ToolsCall], phase: 'request' }],
+        },
+        handler: (params) =>
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ type: 'validation', phase: params.phase, valid: true }), 2_000),
+          ),
+      },
+    ]);
+
+    const started = Date.now();
+    const result = await executeInterceptorChainOnClients(
+      [{ client: hung.client, label: 'hung-host' }],
+      {
+        event: InterceptionEvents.ToolsCall,
+        phase: 'request',
+        payload: { name: 'echo' },
+        timeoutMs: 150,
+      },
+    );
+
+    expect(result.status).toBe('timeout');
+    expect(Date.now() - started).toBeLessThan(1_500);
+    await hung.close();
+  });
+
+  it('applies overrides by interceptor name from options', async () => {
+    const host = await connectInterceptorHost([
+      {
+        descriptor: {
+          name: 'strict-validator',
+          type: 'validation',
+          hooks: [{ events: [InterceptionEvents.ToolsCall], phase: 'request' }],
+        },
+        handler: (params) => ({
+          type: 'validation',
+          phase: params.phase,
+          valid: false,
+          severity: 'error',
+          messages: [{ message: 'blocked', severity: 'error' }],
+        }),
+      },
+    ]);
+
+    const blocked = await executeInterceptorChainOnClients(
+      [{ client: host.client, label: 'host' }],
+      { event: InterceptionEvents.ToolsCall, phase: 'request', payload: { name: 'echo' } },
+    );
+    expect(blocked.status).toBe('validation_failed');
+
+    const audited = await executeInterceptorChainOnClients(
+      [{ client: host.client, label: 'host' }],
+      { event: InterceptionEvents.ToolsCall, phase: 'request', payload: { name: 'echo' } },
+      { overrides: { 'strict-validator': { mode: 'audit' } } },
+    );
+    expect(audited.status).toBe('success');
+
+    await host.close();
+  });
 });

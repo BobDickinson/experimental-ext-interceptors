@@ -26,6 +26,15 @@ export const InterceptorHookSchema = z.object({
   phase: InterceptorPhaseSchema,
 });
 
+/** Invoker-side chain-entry execution policy (SEP-2624 InterceptorOverrides). */
+export const InterceptorOverridesSchema = z.object({
+  failOpen: z.boolean().optional(),
+  priorityHint: PriorityHintSchema.optional(),
+  mode: InterceptorModeSchema.optional(),
+  timeoutMs: z.number().optional(),
+  hooks: z.array(InterceptorHookSchema).optional(),
+});
+
 export const InterceptorSchema = z.object({
   name: z.string(),
   version: z.string().optional(),

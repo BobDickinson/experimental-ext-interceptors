@@ -18,9 +18,16 @@ import type {
   ListInterceptorsResult,
 } from '../protocol/types.js';
 
+export interface InterceptorRequestOptions {
+  signal?: AbortSignal;
+  /** Wire-level timeout for this request; defaults to the MCP SDK default. */
+  timeoutMs?: number;
+}
+
 export async function listInterceptors(
   client: Client,
   params?: ListInterceptorsRequestParams,
+  options?: InterceptorRequestOptions,
 ): Promise<ListInterceptorsResult> {
   return client.request(
     {
@@ -28,12 +35,14 @@ export async function listInterceptors(
       params: (params ?? {}) as unknown as Record<string, unknown>,
     },
     ListInterceptorsResultSchema,
+    { signal: options?.signal, timeout: options?.timeoutMs },
   );
 }
 
 export async function invokeInterceptor(
   client: Client,
   params: InvokeInterceptorRequestParams,
+  options?: InterceptorRequestOptions,
 ): Promise<InterceptorResult> {
   return client.request(
     {
@@ -41,6 +50,7 @@ export async function invokeInterceptor(
       params: params as unknown as Record<string, unknown>,
     },
     InterceptorResultSchema,
+    { signal: options?.signal, timeout: options?.timeoutMs ?? params.timeoutMs },
   );
 }
 

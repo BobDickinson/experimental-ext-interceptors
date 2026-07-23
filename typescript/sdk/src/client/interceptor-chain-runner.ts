@@ -5,6 +5,7 @@ import { throwChainFailure } from '../protocol/errors.js';
 import type {
   ExecuteChainRequestParams,
   InterceptorChainResult,
+  InterceptorOverrides,
   InterceptorPhase,
   InvokeInterceptorContext,
 } from '../protocol/types.js';
@@ -19,6 +20,8 @@ export interface InterceptorChainRunnerOptions {
   defaultContext?: InvokeInterceptorContext;
   /** Passed to multi-host chain merge when more than one interceptor client is configured. */
   duplicateNamePolicy?: DuplicateInterceptorNamePolicy;
+  /** Invoker-side execution policy per interceptor name (SEP chain-entry overrides). */
+  overrides?: Record<string, InterceptorOverrides>;
 }
 
 export class InterceptorChainRunner {
@@ -27,6 +30,7 @@ export class InterceptorChainRunner {
   private readonly timeoutMs: number | undefined;
   private readonly defaultContext: InvokeInterceptorContext | undefined;
   private readonly duplicateNamePolicy: DuplicateInterceptorNamePolicy | undefined;
+  private readonly overrides: Record<string, InterceptorOverrides> | undefined;
 
   constructor(options: InterceptorChainRunnerOptions) {
     this.clients = options.interceptorClients;
@@ -34,6 +38,7 @@ export class InterceptorChainRunner {
     this.timeoutMs = options.timeoutMs;
     this.defaultContext = options.defaultContext;
     this.duplicateNamePolicy = options.duplicateNamePolicy;
+    this.overrides = options.overrides;
   }
 
   shouldIntercept(eventName: string): boolean {
@@ -62,7 +67,7 @@ export class InterceptorChainRunner {
     const chainResult = await executeInterceptorChainOnClients(
       this.clients.map((client, index) => ({ client, label: `host-${index}` })),
       chainParams,
-      { signal, duplicateNamePolicy: this.duplicateNamePolicy },
+      { signal, duplicateNamePolicy: this.duplicateNamePolicy, overrides: this.overrides },
     );
 
     if (chainResult.status !== 'success') {

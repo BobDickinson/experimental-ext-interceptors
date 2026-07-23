@@ -3,6 +3,7 @@
 // license that can be found in the LICENSE file.
 
 import { InterceptionEvents } from '../protocol/constants.js';
+import { InterceptorOverrideHookError } from '../protocol/errors.js';
 import { resolvePriority } from '../protocol/resolve-priority.js';
 import {
   isMutationResult,
@@ -10,11 +11,13 @@ import {
 } from '../protocol/results.js';
 import type {
   ChainAbortInfo,
+  ChainInterceptorEntry,
   ChainValidationSummary,
   ExecuteChainRequestParams,
   Interceptor,
   InterceptorChainResult,
   InterceptorChainStatus,
+  InterceptorHook,
   InterceptorResult,
   InvokeInterceptorRequestParams,
   SinkInterceptorResult,
@@ -34,48 +37,90 @@ export function matchesEvent(hookEvents: string[], requestEvent: string): boolea
   return false;
 }
 
-function filterInterceptors(
-  interceptors: Interceptor[],
-  chainParams: ExecuteChainRequestParams,
-): Interceptor[] {
-  const nameFilter = chainParams.interceptors;
-  const out: Interceptor[] = [];
+/** Entry with invoker policy resolved against the descriptor's declared defaults. */
+interface ResolvedChainEntry {
+  descriptor: Interceptor;
+  isAudit: boolean;
+  failOpen: boolean;
+  /** Per-interceptor timeout (override only); the chain timeout is separate. */
+  timeoutMs?: number;
+  priority: number;
+  hooks: InterceptorHook[];
+}
 
-  for (const descriptor of interceptors) {
+function assertHooksNarrow(descriptor: Interceptor, overrideHooks: InterceptorHook[]): void {
+  for (const oh of overrideHooks) {
+    const declared = descriptor.hooks.filter((h) => h.phase === oh.phase);
+    for (const ev of oh.events) {
+      const covered = declared.some(
+        (h) => h.events.includes(ev) || (ev !== InterceptionEvents.All && matchesEvent(h.events, ev)),
+      );
+      if (!covered) {
+        throw new InterceptorOverrideHookError(
+          descriptor.name,
+          `event '${ev}' (phase '${oh.phase}') is not declared`,
+        );
+      }
+    }
+  }
+}
+
+function resolveEntries(
+  interceptors: Array<Interceptor | ChainInterceptorEntry>,
+  chainParams: ExecuteChainRequestParams,
+): ResolvedChainEntry[] {
+  const nameFilter = chainParams.interceptors;
+  const out: ResolvedChainEntry[] = [];
+
+  for (const item of interceptors) {
+    const entry: ChainInterceptorEntry = 'interceptor' in item ? item : { interceptor: item };
+    const descriptor = entry.interceptor;
+    const overrides = entry.overrides;
+
+    if (overrides?.hooks) {
+      assertHooksNarrow(descriptor, overrides.hooks);
+    }
+
     if (nameFilter && nameFilter.length > 0 && !nameFilter.includes(descriptor.name)) {
       continue;
     }
 
-    let matchesHook = false;
-    for (const hook of descriptor.hooks) {
-      if (hook.phase !== chainParams.phase) {
-        continue;
-      }
-      if (matchesEvent(hook.events, chainParams.event)) {
-        matchesHook = true;
-        break;
-      }
+    const hooks = overrides?.hooks ?? descriptor.hooks;
+    const matchesHook = hooks.some(
+      (hook) => hook.phase === chainParams.phase && matchesEvent(hook.events, chainParams.event),
+    );
+    if (!matchesHook) {
+      continue;
     }
-    if (matchesHook) {
-      out.push(descriptor);
-    }
+
+    out.push({
+      descriptor,
+      isAudit: (overrides?.mode ?? descriptor.mode) === 'audit',
+      failOpen: (overrides?.failOpen ?? descriptor.failOpen) === true,
+      timeoutMs: overrides?.timeoutMs,
+      priority: resolvePriority(descriptor, chainParams.phase, overrides),
+      hooks,
+    });
   }
 
   return out;
 }
 
 function createInvokeParams(
-  descriptor: Interceptor,
+  entry: ResolvedChainEntry,
   chainParams: ExecuteChainRequestParams,
   currentPayload: unknown,
 ): InvokeInterceptorRequestParams {
   return {
-    name: descriptor.name,
+    name: entry.descriptor.name,
     event: chainParams.event,
     phase: chainParams.phase,
     payload: currentPayload,
+    config: chainParams.config?.[entry.descriptor.name],
     context: chainParams.context,
-    timeoutMs: chainParams.timeoutMs,
+    // Per-interceptor budget only; the chain-aggregate timeout is enforced via
+    // the chain signal, not forwarded per invoke.
+    timeoutMs: entry.timeoutMs,
   };
 }
 
@@ -86,29 +131,45 @@ function clonePayload(payload: unknown): unknown {
   return structuredClone(payload);
 }
 
-function isAbortError(err: unknown, signal?: AbortSignal): boolean {
-  if (signal?.aborted) {
-    return true;
-  }
-  return err instanceof Error && err.name === 'TimeoutError';
+function isAbortLike(err: unknown): boolean {
+  return err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
 }
 
-function chainSignal(outer?: AbortSignal, timeoutMs?: number): AbortSignal | undefined {
-  if (timeoutMs == null && outer == null) {
+/** `AbortSignal.any` with a fallback for Node < 20.3. */
+function anySignal(signals: AbortSignal[]): AbortSignal {
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any(signals);
+  }
+  const controller = new AbortController();
+  for (const s of signals) {
+    if (s.aborted) {
+      controller.abort(s.reason);
+      break;
+    }
+    s.addEventListener('abort', () => controller.abort(s.reason), { once: true });
+  }
+  return controller.signal;
+}
+
+function combineSignals(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
+  const present = signals.filter((s): s is AbortSignal => s != null);
+  if (present.length === 0) {
     return undefined;
   }
-  if (timeoutMs == null) {
-    return outer;
+  if (present.length === 1) {
+    return present[0];
   }
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  if (outer == null) {
-    return timeoutSignal;
-  }
-  return AbortSignal.any([outer, timeoutSignal]);
+  return anySignal(present);
+}
+
+/** Signal for one invoke: chain signal plus the entry's per-interceptor timeout. */
+function entrySignal(chainCt: AbortSignal | undefined, entry: ResolvedChainEntry): AbortSignal | undefined {
+  const perTimeout = entry.timeoutMs != null ? AbortSignal.timeout(entry.timeoutMs) : undefined;
+  return combineSignals(chainCt, perTimeout);
 }
 
 export async function executeInterceptorChain(
-  interceptors: Interceptor[],
+  interceptors: Array<Interceptor | ChainInterceptorEntry>,
   invoker: InterceptorInvoker,
   chainParams: ExecuteChainRequestParams,
   signal?: AbortSignal,
@@ -120,18 +181,15 @@ export async function executeInterceptorChain(
   let abortInfo: ChainAbortInfo | undefined;
   let status: InterceptorChainStatus = 'success';
 
-  const applicable = filterInterceptors(interceptors, chainParams);
+  const applicable = resolveEntries(interceptors, chainParams);
   const mutations = applicable
-    .filter((i) => i.type === 'mutation')
-    .sort(
-      (a, b) =>
-        resolvePriority(a, chainParams.phase) - resolvePriority(b, chainParams.phase) ||
-        a.name.localeCompare(b.name),
-    );
-  const validations = applicable.filter((i) => i.type === 'validation');
-  const sinks = applicable.filter((i) => i.type === 'sink');
+    .filter((e) => e.descriptor.type === 'mutation')
+    .sort((a, b) => a.priority - b.priority || a.descriptor.name.localeCompare(b.descriptor.name));
+  const validations = applicable.filter((e) => e.descriptor.type === 'validation');
+  const sinks = applicable.filter((e) => e.descriptor.type === 'sink');
 
-  const ct = chainSignal(signal, chainParams.timeoutMs);
+  const timeoutSignal = chainParams.timeoutMs != null ? AbortSignal.timeout(chainParams.timeoutMs) : undefined;
+  const ct = combineSignals(signal, timeoutSignal);
 
   try {
     if (chainParams.phase === 'request') {
@@ -167,7 +225,9 @@ export async function executeInterceptorChain(
       abortInfo = mut.abortInfo;
     }
   } catch (err) {
-    if (isAbortError(err, ct)) {
+    // Chain-timeout aborts map to status 'timeout'; caller cancellation (outer
+    // signal) and unexpected errors surface to the caller unchanged.
+    if (isAbortLike(err) && timeoutSignal?.aborted) {
       status = 'timeout';
     } else {
       throw err;
@@ -191,23 +251,23 @@ export async function executeInterceptorChain(
 }
 
 async function executeMutations(
-  mutations: Interceptor[],
+  mutations: ResolvedChainEntry[],
   invoker: InterceptorInvoker,
   chainParams: ExecuteChainRequestParams,
   initialPayload: unknown,
   results: InterceptorResult[],
-  signal?: AbortSignal,
+  chainCt?: AbortSignal,
 ): Promise<{ payload: unknown; status: InterceptorChainStatus; abortInfo?: ChainAbortInfo }> {
   let currentPayload = initialPayload;
 
-  for (const descriptor of mutations) {
-    const isAudit = descriptor.mode === 'audit';
-    const failOpen = descriptor.failOpen === true;
+  for (const entry of mutations) {
+    const { descriptor, isAudit, failOpen } = entry;
 
     try {
-      const invokeParams = createInvokeParams(descriptor, chainParams, currentPayload);
+      chainCt?.throwIfAborted();
+      const invokeParams = createInvokeParams(entry, chainParams, currentPayload);
       const sw = Date.now();
-      const result = await invoker(invokeParams, signal);
+      const result = await invoker(invokeParams, entrySignal(chainCt, entry));
       result.interceptor = descriptor.name;
       result.durationMs = Date.now() - sw;
       results.push(result);
@@ -231,9 +291,11 @@ async function executeMutations(
         currentPayload = clonePayload(result.payload);
       }
     } catch (err) {
-      if (isAbortError(err, signal)) {
+      if (isAbortLike(err) && chainCt?.aborted) {
         throw err;
       }
+      // Anything else — including this entry's own timeout — is an
+      // interceptor-level failure routed through audit/failOpen policy.
       if (isAudit || failOpen) {
         continue;
       }
@@ -253,29 +315,30 @@ async function executeMutations(
 }
 
 async function executeValidations(
-  validations: Interceptor[],
+  validations: ResolvedChainEntry[],
   invoker: InterceptorInvoker,
   chainParams: ExecuteChainRequestParams,
   currentPayload: unknown,
   results: InterceptorResult[],
   summary: ChainValidationSummary,
-  signal?: AbortSignal,
+  chainCt?: AbortSignal,
 ): Promise<{ status: InterceptorChainStatus; abortInfo?: ChainAbortInfo }> {
   const completed = await Promise.all(
-    validations.map(async (descriptor) => {
+    validations.map(async (entry) => {
       try {
-        const invokeParams = createInvokeParams(descriptor, chainParams, currentPayload);
+        chainCt?.throwIfAborted();
+        const invokeParams = createInvokeParams(entry, chainParams, currentPayload);
         const sw = Date.now();
-        const result = await invoker(invokeParams, signal);
-        result.interceptor = descriptor.name;
+        const result = await invoker(invokeParams, entrySignal(chainCt, entry));
+        result.interceptor = entry.descriptor.name;
         result.durationMs = Date.now() - sw;
-        return { descriptor, result, error: null as Error | null };
+        return { entry, result, error: null as Error | null };
       } catch (err) {
-        if (isAbortError(err, signal)) {
+        if (isAbortLike(err) && chainCt?.aborted) {
           throw err;
         }
         return {
-          descriptor,
+          entry,
           result: null as InterceptorResult | null,
           error: err instanceof Error ? err : new Error(String(err)),
         };
@@ -283,22 +346,24 @@ async function executeValidations(
     }),
   );
 
-  for (const { descriptor, result, error } of completed) {
-    const isAudit = descriptor.mode === 'audit';
-    const failOpen = descriptor.failOpen === true;
+  // SEP: all validations complete, then reject. Aggregate every result before
+  // returning so blocked chains still carry the full diagnostic picture.
+  let blocking: ChainAbortInfo | undefined;
+
+  for (const { entry, result, error } of completed) {
+    const { descriptor, isAudit, failOpen } = entry;
 
     if (error) {
       if (isAudit || failOpen) {
         continue;
       }
-      return {
-        status: 'validation_failed',
-        abortInfo: {
-          interceptor: descriptor.name,
-          reason: error.message,
-          type: 'validation',
-        },
+      summary.errors++;
+      blocking ??= {
+        interceptor: descriptor.name,
+        reason: error.message,
+        type: 'validation',
       };
+      continue;
     }
 
     if (!result) {
@@ -324,43 +389,44 @@ async function executeValidations(
       }
 
       if (!isAudit && !result.valid && result.severity === 'error') {
-        return {
-          status: 'validation_failed',
-          abortInfo: {
-            interceptor: descriptor.name,
-            reason: result.messages?.[0]?.message ?? 'Validation failed',
-            type: 'validation',
-          },
+        blocking ??= {
+          interceptor: descriptor.name,
+          reason: result.messages?.[0]?.message ?? 'Validation failed',
+          type: 'validation',
         };
       }
     }
   }
 
+  if (blocking) {
+    return { status: 'validation_failed', abortInfo: blocking };
+  }
   return { status: 'success' };
 }
 
 async function executeSinks(
-  sinks: Interceptor[],
+  sinks: ResolvedChainEntry[],
   invoker: InterceptorInvoker,
   chainParams: ExecuteChainRequestParams,
   currentPayload: unknown,
   results: InterceptorResult[],
-  signal?: AbortSignal,
+  chainCt?: AbortSignal,
 ): Promise<void> {
   const completed = await Promise.all(
-    sinks.map(async (descriptor) => {
+    sinks.map(async (entry) => {
       try {
-        const invokeParams = createInvokeParams(descriptor, chainParams, currentPayload);
+        chainCt?.throwIfAborted();
+        const invokeParams = createInvokeParams(entry, chainParams, currentPayload);
         const sw = Date.now();
-        const result = await invoker(invokeParams, signal);
-        result.interceptor = descriptor.name;
+        const result = await invoker(invokeParams, entrySignal(chainCt, entry));
+        result.interceptor = entry.descriptor.name;
         result.durationMs = Date.now() - sw;
         return result;
       } catch {
         const fallback: SinkInterceptorResult = {
           type: 'sink',
           phase: chainParams.phase,
-          interceptor: descriptor.name,
+          interceptor: entry.descriptor.name,
           recorded: false,
         };
         return fallback;

@@ -12,6 +12,8 @@ import type {
   InvokeInterceptorRequestParams,
 } from '../protocol/types.js';
 import { executeInterceptorChain, type InterceptorInvoker } from './chain-orchestrator.js';
+import { InterceptorOverrideHookError } from '../protocol/errors.js';
+import type { InterceptorOverrides } from '../protocol/types.js';
 
 type Handler = InterceptorInvoker;
 
@@ -588,5 +590,186 @@ describe('executeInterceptorChain', () => {
     );
 
     expect(result.status).toBe('timeout');
+  });
+});
+
+describe('executeInterceptorChain overrides (SEP capability vs policy)', () => {
+  function runWithOverrides(
+    entries: Array<{ descriptor: Interceptor; handler: Handler; overrides?: InterceptorOverrides }>,
+    chainParams: ExecuteChainRequestParams,
+    signal?: AbortSignal,
+  ) {
+    const byName = new Map(entries.map((e) => [e.descriptor.name, e.handler]));
+    return executeInterceptorChain(
+      entries.map((e) => ({ interceptor: e.descriptor, overrides: e.overrides })),
+      (req, s) => byName.get(req.name)!(req, s),
+      chainParams,
+      signal,
+    );
+  }
+
+  const req: ExecuteChainRequestParams = {
+    event: InterceptionEvents.ToolsCall,
+    phase: 'request',
+    payload: { name: 'echo' },
+  };
+
+  it('mode override to audit stops a failing validator from blocking', async () => {
+    const failing = createEntry('strict', 'validation', () =>
+      validationFailure('request', { message: 'nope', severity: 'error' }),
+    );
+    const blocked = await runWithOverrides([{ ...failing }], req);
+    expect(blocked.status).toBe('validation_failed');
+
+    const audited = await runWithOverrides([{ ...failing, overrides: { mode: 'audit' } }], req);
+    expect(audited.status).toBe('success');
+  });
+
+  it('failOpen override lets a throwing mutator be skipped', async () => {
+    const boom = createEntry('boom', 'mutation', () => {
+      throw new Error('exploded');
+    });
+    const closed = await runWithOverrides([{ ...boom }], req);
+    expect(closed.status).toBe('mutation_failed');
+
+    const open = await runWithOverrides([{ ...boom, overrides: { failOpen: true } }], req);
+    expect(open.status).toBe('success');
+  });
+
+  it('priorityHint override reorders mutations', async () => {
+    const order: string[] = [];
+    const first = createEntry(
+      'a-mutator',
+      'mutation',
+      () => {
+        order.push('a');
+        return { type: 'mutation', phase: 'request', modified: false };
+      },
+      { priorityHint: 10 },
+    );
+    const second = createEntry(
+      'b-mutator',
+      'mutation',
+      () => {
+        order.push('b');
+        return { type: 'mutation', phase: 'request', modified: false };
+      },
+      { priorityHint: 20 },
+    );
+
+    await runWithOverrides([{ ...first }, { ...second, overrides: { priorityHint: -1 } }], req);
+    expect(order).toEqual(['b', 'a']);
+  });
+
+  it('hook narrowing excludes the interceptor from non-matching events', async () => {
+    let invoked = false;
+    const validator = createEntry(
+      'narrowed',
+      'validation',
+      () => {
+        invoked = true;
+        return validationSuccess('request');
+      },
+      { events: [InterceptionEvents.ToolsCall, InterceptionEvents.PromptsGet] },
+    );
+
+    const result = await runWithOverrides(
+      [
+        {
+          ...validator,
+          overrides: {
+            hooks: [{ events: [InterceptionEvents.PromptsGet], phase: 'request' }],
+          },
+        },
+      ],
+      req,
+    );
+    expect(result.status).toBe('success');
+    expect(invoked).toBe(false);
+  });
+
+  it('rejects override hooks that widen beyond declared hooks', async () => {
+    const validator = createEntry('widened', 'validation', () => validationSuccess('request'), {
+      events: [InterceptionEvents.ToolsCall],
+      phase: 'request',
+    });
+
+    await expect(
+      runWithOverrides(
+        [
+          {
+            ...validator,
+            overrides: {
+              hooks: [{ events: [InterceptionEvents.ResourcesRead], phase: 'request' }],
+            },
+          },
+        ],
+        req,
+      ),
+    ).rejects.toBeInstanceOf(InterceptorOverrideHookError);
+  });
+
+  it('per-interceptor timeout override blocks a hung fail-closed mutator', async () => {
+    const hung = createEntry(
+      'hung',
+      'mutation',
+      (_, signal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () =>
+            reject(new DOMException('timed out', 'TimeoutError')),
+          );
+        }),
+    );
+
+    const result = await runWithOverrides([{ ...hung, overrides: { timeoutMs: 50 } }], req);
+    expect(result.status).toBe('mutation_failed');
+    expect(result.abortedAt?.interceptor).toBe('hung');
+  });
+
+  it('forwards per-interceptor config from chain params to invoke params', async () => {
+    let seen: unknown;
+    const validator = createEntry('configured', 'validation', (invokeParams) => {
+      seen = invokeParams.config;
+      return validationSuccess('request');
+    });
+
+    await runWithOverrides([{ ...validator }], {
+      ...req,
+      config: { configured: { redact: true } },
+    });
+    expect(seen).toEqual({ redact: true });
+  });
+
+  it('completes all validations before rejecting and aggregates every result', async () => {
+    const failing = createEntry('failing', 'validation', () =>
+      validationFailure('request', { message: 'blocked', severity: 'error' }),
+    );
+    const warning = createEntry('warning', 'validation', () => ({
+      type: 'validation',
+      phase: 'request',
+      valid: true,
+      messages: [{ message: 'heads up', severity: 'warn' }],
+    }));
+
+    const result = await runWithOverrides([{ ...failing }, { ...warning }], req);
+    expect(result.status).toBe('validation_failed');
+    expect(result.results.map((r) => r.interceptor).sort()).toEqual(['failing', 'warning']);
+    expect(result.validationSummary).toEqual({ errors: 1, warnings: 1, infos: 0 });
+  });
+
+  it('caller cancellation rejects instead of reporting chain timeout', async () => {
+    const controller = new AbortController();
+    const slow = createEntry(
+      'slow',
+      'validation',
+      (_, signal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason));
+        }),
+    );
+
+    const pending = runWithOverrides([{ ...slow }], req, controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toThrow();
   });
 });

@@ -1,7 +1,7 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Interceptor } from '../protocol/types.js';
+import type { Interceptor, InterceptorOverrides } from '../protocol/types.js';
 
 /** One interceptor descriptor and the MCP client for the host that registered it. */
 export interface InterceptorChainEntry {
@@ -9,6 +9,8 @@ export interface InterceptorChainEntry {
   client: Client;
   /** Diagnostic label for this host (duplicate-name errors, logging). */
   hostLabel: string;
+  /** Invoker-side execution policy for this entry (SEP chain-entry overrides). */
+  overrides?: InterceptorOverrides;
 }
 
 /** Identifies an interceptor host when listing or merging chain entries. */
