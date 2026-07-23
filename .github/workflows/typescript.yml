@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd typescript/sdk
-          npm install
+          npm ci
       - name: Run TypeScript compiler check
         run: |
           cd typescript/sdk
@@ -55,7 +55,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd typescript/sdk
-          npm install
+          npm ci
       - name: Run tests
         run: |
           cd typescript/sdk

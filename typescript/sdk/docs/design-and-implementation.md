@@ -67,6 +67,7 @@ Per SEP-2624 (with terminology clarified for this SDK):
   - **Request (sending):** mutations (sequential by ascending `priorityHint`, name tie-break) → validations (parallel) → sinks (fire-and-forget).
   - **Response (receiving):** validations (parallel) → sinks (fire-and-forget) → mutations (sequential).
 - **`mode`:** `active` vs `audit` (shadow validation / mutation). **`failOpen`:** whether failures allow the message to proceed (per SEP rules).
+- **Overrides (capability vs policy):** each chain entry may carry invoker-declared `InterceptorOverrides` (`failOpen`, `priorityHint`, `mode`, `timeoutMs`, hook narrowing) that take precedence over the interceptor's declared defaults. Override hooks may only narrow declared hooks; widening is rejected with `InterceptorOverrideHookError` per the SEP MUST. Pass overrides per entry to `executeInterceptorChain`, or keyed by interceptor name via `executeInterceptorChainOnClients` / `InterceptorChainRunner` options. A per-entry `timeoutMs` cancels just that invoke and routes through resolved `failOpen`; the chain-aggregate `timeoutMs` on `ExecuteChainRequestParams` cancels the whole chain with status `timeout`.
 
 If the SEP text conflicts with itself, follow **normative** sections of [`docs/sep.md`](../../docs/sep.md) for wire methods and payloads. Where the SEP is silent or ambiguous, match behavior of the **C# reference** (e.g. **`interceptors/list`**, not `interceptor/list`).
 
