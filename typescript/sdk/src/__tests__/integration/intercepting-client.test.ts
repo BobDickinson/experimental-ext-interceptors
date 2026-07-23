@@ -48,6 +48,42 @@ describe('InterceptingMcpClient', () => {
     await backend.close();
   });
 
+  it('does not restore arguments a request-phase mutation removed', async () => {
+    const redactor: RegisteredInterceptor = {
+      descriptor: {
+        name: 'arg-stripper',
+        type: 'mutation',
+        hooks: [{ events: [InterceptionEvents.ToolsCall], phase: 'request' }],
+      },
+      handler: (params) => {
+        const p = params.payload as { name?: string };
+        return {
+          type: 'mutation',
+          phase: params.phase,
+          modified: true,
+          payload: { name: p.name ?? 'echo' },
+        };
+      },
+    };
+
+    const interceptor = await connectInterceptorHost([redactor]);
+    const backend = await connectEchoBackend();
+
+    const gateway = new InterceptingMcpClient(backend.client, {
+      interceptorClient: interceptor.client,
+      events: [InterceptionEvents.ToolsCall],
+    });
+
+    await gateway.callTool('echo', { message: 'secret-pii' });
+
+    expect(backend.lastCall.name).toBe('echo');
+    expect(backend.lastCall.arguments).toBeUndefined();
+
+    await gateway.close();
+    await interceptor.close();
+    await backend.close();
+  });
+
   it('blocks tools/call with validation exception when interceptor rejects', async () => {
     const blocker: RegisteredInterceptor = {
       descriptor: {

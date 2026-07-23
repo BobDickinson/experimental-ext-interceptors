@@ -71,13 +71,21 @@ export class InterceptingMcpClient {
       signal,
     );
 
-    const mutated =
-      typeof requestPayload === 'object' && requestPayload !== null && 'name' in requestPayload
-        ? (requestPayload as { name: string; arguments?: Record<string, unknown> })
-        : callParams;
+    if (
+      typeof requestPayload !== 'object' ||
+      requestPayload === null ||
+      typeof (requestPayload as { name?: unknown }).name !== 'string'
+    ) {
+      throw new Error(
+        'Interceptor chain produced an invalid tools/call payload: expected an object with a string `name`',
+      );
+    }
+    // Forward the mutated payload as-is: a mutation that removed `arguments`
+    // (e.g. redaction) must not have the original arguments restored.
+    const mutated = requestPayload as { name: string; arguments?: Record<string, unknown> };
 
     const result = await this.inner.callTool(
-      { name: mutated.name, arguments: mutated.arguments ?? args },
+      { name: mutated.name, arguments: mutated.arguments },
       resultSchema,
       { signal },
     );
@@ -165,13 +173,21 @@ export class InterceptingMcpClient {
       signal,
     );
 
-    const mutated =
-      typeof requestPayload === 'object' && requestPayload !== null && 'name' in requestPayload
-        ? (requestPayload as { name: string; arguments?: Record<string, string> })
-        : getParams;
+    if (
+      typeof requestPayload !== 'object' ||
+      requestPayload === null ||
+      typeof (requestPayload as { name?: unknown }).name !== 'string'
+    ) {
+      throw new Error(
+        'Interceptor chain produced an invalid prompts/get payload: expected an object with a string `name`',
+      );
+    }
+    // Forward the mutated payload as-is: a mutation that removed `arguments`
+    // (e.g. redaction) must not have the original arguments restored.
+    const mutated = requestPayload as { name: string; arguments?: Record<string, string> };
 
     const result = await this.inner.getPrompt(
-      { name: mutated.name, arguments: mutated.arguments ?? args },
+      { name: mutated.name, arguments: mutated.arguments },
       { signal },
     );
 
