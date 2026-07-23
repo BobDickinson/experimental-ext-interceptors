@@ -27,7 +27,7 @@ export interface InterceptorCompatibility {
   maxProtocol?: string;
 }
 
-/** Per-phase mutation ordering hint (SEP-1763). Omitted sides default to 0. */
+/** Per-phase mutation ordering hint (SEP-2624). Omitted sides default to 0. */
 export interface PriorityHintByPhase {
   request?: number;
   response?: number;

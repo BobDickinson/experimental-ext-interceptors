@@ -8,7 +8,7 @@ export const InterceptorRequestMethods = {
   InterceptorInvoke: 'interceptor/invoke',
 } as const;
 
-/** Well-known lifecycle event identifiers (SEP-1763). */
+/** Well-known lifecycle event identifiers (SEP-2624). */
 export const InterceptionEvents = {
   ToolsList: 'tools/list',
   ToolsCall: 'tools/call',

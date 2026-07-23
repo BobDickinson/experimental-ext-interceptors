@@ -4,7 +4,7 @@
 
 This document is the **authoritative design reference** for the TypeScript Interceptor SDK shipped from `/typescript/sdk` as **`mcp-ext-interceptors`**. It defines what the package does, how it is structured, and how it integrates with the official MCP TypeScript SDK.
 
-Readers should use this document to implement or review the SDK. Normative interceptor protocol behavior is defined in [SEP-1763](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1763) ([`docs/sep.md`](../../docs/sep.md) in this repository). Behavioral parity with the in-repo **C# Interceptor SDK** ([`csharp/sdk`](../../csharp/sdk)) is a primary goal.
+Readers should use this document to implement or review the SDK. Normative interceptor protocol behavior is defined in [SEP-2624](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/2624) ([`docs/sep.md`](../../docs/sep.md) in this repository). Behavioral parity with the in-repo **C# Interceptor SDK** ([`csharp/sdk`](../../csharp/sdk)) is a primary goal.
 
 The plan distinguishes two relationships to the MCP TypeScript SDK:
 
@@ -21,7 +21,7 @@ Implementation targets **v1** today while following **v2-shaped** module boundar
 
 ### 1.1 Product scope
 
-- Implement the interceptor protocol from [SEP-1763](/docs/sep.md): wire methods, execution semantics, capability advertisement, and SDK conveniences (chain orchestration, hosting interceptors on an **interceptor host**, client helpers, and a **transparent gateway**).
+- Implement the interceptor protocol from [SEP-2624](/docs/sep.md): wire methods, execution semantics, capability advertisement, and SDK conveniences (chain orchestration, hosting interceptors on an **interceptor host**, client helpers, and a **transparent gateway**).
 - Provide **client**, **server**, and **gateway** APIs in one npm package, comparable in depth to the C# Interceptor SDK in this repository.
 - Include **integration tests** where a client built with this SDK talks to a server built with this SDK over an in-process or equivalent transport, covering list, invoke, and chain execution.
 - Ship **runnable examples** under `examples/`, modeled on the C# SDK’s [`csharp/sdk/samples`](../../csharp/sdk/samples) (see §10)—not part of the published npm artifact.
@@ -51,7 +51,7 @@ Implementation targets **v1** today while following **v2-shaped** module boundar
 
 ## 2. Interceptor model
 
-Per SEP-1763 (with terminology clarified for this SDK):
+Per SEP-2624 (with terminology clarified for this SDK):
 
 ### 2.1 Primitive vs hosts
 
@@ -148,7 +148,7 @@ Build: `tsc -p tsconfig.build.json` → `dist/`; lint uses `tsconfig.eslint.json
 
 | | Wire / API value | Meaning |
 |---|------------------|--------|
-| **SEP-1763** | `enforce` \| `audit` | `enforce` = normal blocking and mutation application; `audit` = shadow / non-blocking |
+| **SEP-2624** | `enforce` \| `audit` | `enforce` = normal blocking and mutation application; `audit` = shadow / non-blocking |
 | **C# Interceptor SDK** | `active` \| `audit` | `InterceptorMode.Active` serializes as `"active"` (same semantics as SEP `enforce`) |
 | **TypeScript SDK** | `enforce` \| `audit` | Matches the SEP on the wire and in `InterceptorMode` |
 
@@ -162,7 +162,7 @@ Build: `tsc -p tsconfig.build.json` → `dist/`; lint uses `tsconfig.eslint.json
 
 | | `priorityHint` shape | Mutation ordering |
 |---|----------------------|-------------------|
-| **SEP-1763** | `number` **or** `{ request?: number; response?: number }` | `resolvePriority(interceptor, phase)`; missing side → `0`; validations ignore priority |
+| **SEP-2624** | `number` **or** `{ request?: number; response?: number }` | `resolvePriority(interceptor, phase)`; missing side → `0`; validations ignore priority |
 | **C# Interceptor SDK** | `int?` only | `.OrderBy(i => i.PriorityHint ?? 0)` — same value for both phases |
 | **TypeScript SDK** | `PriorityHint` union + Zod parse | `resolvePriority()` in `chain-orchestrator` when sorting mutations |
 
@@ -489,7 +489,7 @@ Runnable examples mirror the **C# Interceptor SDK** layout in [`csharp/sdk/sampl
 
 ## 11. Multi-host chain merge (C# port notes)
 
-This section documents multi-host chain behavior in the TypeScript SDK so the **C# Interceptor SDK** team can implement the same pattern if desired. It is not a breaking change to the wire protocol; it aligns client-side chain utilities with **SEP-1763 chain execution** ([`docs/sep.md`](../../docs/sep.md) § Chain Execution).
+This section documents multi-host chain behavior in the TypeScript SDK so the **C# Interceptor SDK** team can implement the same pattern if desired. It is not a breaking change to the wire protocol; it aligns client-side chain utilities with **SEP-2624 chain execution** ([`docs/sep.md`](../../docs/sep.md) § Chain Execution).
 
 ### 11.1 Problem
 

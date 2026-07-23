@@ -1,6 +1,6 @@
 # MCP Interceptors TypeScript SDK
 
-TypeScript implementation of [SEP-1763](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1763) — gateway-level interceptors for the [Model Context Protocol](https://modelcontextprotocol.io/).
+TypeScript implementation of [SEP-2624](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/2624) — gateway-level interceptors for the [Model Context Protocol](https://modelcontextprotocol.io/).
 
 Requires **`@modelcontextprotocol/sdk` v1.x** as a peer dependency.
 
