@@ -1,16 +1,17 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
-
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { Server } from '@modelcontextprotocol/server';
 import { matchesEvent } from '../client/chain-orchestrator.js';
+import { InterceptorRequestMethods } from '../protocol/constants.js';
 import type {
   Interceptor,
   InterceptorResult,
   InvokeInterceptorRequestParams,
-  ListInterceptorsRequestParams,
 } from '../protocol/types.js';
 import {
   InterceptorResultSchema,
+  InvokeInterceptorParamsSchema,
   InvokeInterceptorRequestSchema,
+  ListInterceptorsParamsSchema,
   ListInterceptorsRequestSchema,
   ListInterceptorsResultSchema,
 } from '../protocol/zod-schemas.js';
@@ -45,50 +46,60 @@ export function registerInterceptorsOnServer(
     registerInterceptorCapabilities(server, descriptors);
   }
 
-  server.setRequestHandler(ListInterceptorsRequestSchema, (request) => {
-    const params = request.params as ListInterceptorsRequestParams | undefined;
-    const eventFilter = params?.event;
-    const listed: Interceptor[] = [];
+  server.setRequestHandler(
+    InterceptorRequestMethods.InterceptorsList,
+    { params: ListInterceptorsParamsSchema.optional() },
+    (params) => {
+      const eventFilter = params?.event;
+      const listed: Interceptor[] = [];
 
-    for (const entry of interceptors) {
-      if (eventFilter) {
-        const matchesAnyHook = entry.descriptor.hooks.some((hook) =>
-          matchesEvent(hook.events, eventFilter),
-        );
-        if (!matchesAnyHook) {
-          continue;
+      for (const entry of interceptors) {
+        if (eventFilter) {
+          const matchesAnyHook = entry.descriptor.hooks.some((hook) =>
+            matchesEvent(hook.events, eventFilter),
+          );
+          if (!matchesAnyHook) {
+            continue;
+          }
         }
+        listed.push(entry.descriptor);
       }
-      listed.push(entry.descriptor);
-    }
 
-    return { interceptors: listed };
-  });
+      return { interceptors: listed };
+    },
+  );
 
-  server.setRequestHandler(InvokeInterceptorRequestSchema, async (request) => {
-    const params = request.params as InvokeInterceptorRequestParams;
-    const entry = byName.get(params.name);
-    if (!entry) {
-      throw interceptorNotFoundError(params.name);
-    }
-
-    const signal =
-      params.timeoutMs != null ? AbortSignal.timeout(params.timeoutMs) : undefined;
-
-    try {
-      // Race the handler against the timeout signal so a handler that ignores
-      // the signal cannot hold the request past timeoutMs.
-      const result = await raceWithSignal(Promise.resolve(entry.handler(params, signal)), signal);
-      result.interceptor = entry.descriptor.name;
-      result.phase = params.phase;
-      return result as unknown as Record<string, unknown>;
-    } catch (err) {
-      if (signal?.aborted && params.timeoutMs != null) {
-        throw interceptorTimeoutError(params.name, params.timeoutMs, params.phase);
+  server.setRequestHandler(
+    InterceptorRequestMethods.InterceptorInvoke,
+    { params: InvokeInterceptorParamsSchema },
+    async (params) => {
+      const invokeParams = params as InvokeInterceptorRequestParams;
+      const entry = byName.get(invokeParams.name);
+      if (!entry) {
+        throw interceptorNotFoundError(invokeParams.name);
       }
-      throw err;
-    }
-  });
+
+      const signal =
+        invokeParams.timeoutMs != null ? AbortSignal.timeout(invokeParams.timeoutMs) : undefined;
+
+      try {
+        // Race the handler against the timeout signal so a handler that ignores
+        // the signal cannot hold the request past timeoutMs.
+        const result = await raceWithSignal(
+          Promise.resolve(entry.handler(invokeParams, signal)),
+          signal,
+        );
+        result.interceptor = entry.descriptor.name;
+        result.phase = invokeParams.phase;
+        return result as unknown as Record<string, unknown>;
+      } catch (err) {
+        if (signal?.aborted && invokeParams.timeoutMs != null) {
+          throw interceptorTimeoutError(invokeParams.name, invokeParams.timeoutMs, invokeParams.phase);
+        }
+        throw err;
+      }
+    },
+  );
 }
 
 function raceWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {

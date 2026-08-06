@@ -1,30 +1,7 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
+import type { Server, CallToolRequest, GetPromptRequest, Implementation, ListPromptsRequest, ListResourcesRequest, ListToolsRequest, Progress, ReadResourceRequest, ServerCapabilities, SubscribeRequest } from "@modelcontextprotocol/server";
+import type { Client } from "@modelcontextprotocol/client";
 
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import {
-  CallToolRequestSchema,
-  CompleteRequestSchema,
-  GetPromptRequestSchema,
-  ListPromptsRequestSchema,
-  ListResourcesRequestSchema,
-  ListResourceTemplatesRequestSchema,
-  ListToolsRequestSchema,
-  ReadResourceRequestSchema,
-  SetLevelRequestSchema,
-  SubscribeRequestSchema,
-  UnsubscribeRequestSchema,
-  type CallToolRequest,
-  type GetPromptRequest,
-  type Implementation,
-  type ListPromptsRequest,
-  type ListResourcesRequest,
-  type ListToolsRequest,
-  type Progress,
-  type ReadResourceRequest,
-  type ServerCapabilities,
-  type SubscribeRequest,
-} from '@modelcontextprotocol/sdk/types.js';
 import { InterceptorChainRunner } from '../client/interceptor-chain-runner.js';
 import { InterceptionEvents } from '../protocol/constants.js';
 import type { InvokeInterceptorContext } from '../protocol/types.js';
@@ -60,13 +37,13 @@ function coerceParams<T extends { params?: unknown }>(
 function messageContextFromRequest(
   method: string,
   params: unknown,
-  extra: { authInfo?: unknown; sessionId?: string; signal?: AbortSignal },
+  ctx: { http?: { authInfo?: unknown }; sessionId?: string },
 ): GatewayMessageContext {
   return {
     method,
     params,
-    authInfo: extra.authInfo,
-    sessionId: extra.sessionId,
+    authInfo: ctx.http?.authInfo,
+    sessionId: ctx.sessionId,
   };
 }
 
@@ -108,13 +85,13 @@ export class GatewayProxyConfigurator {
       this.configureResources(server, backendCaps);
     }
     if (backendCaps?.completions) {
-      server.setRequestHandler(CompleteRequestSchema, (request, extra) =>
-        this.backend.complete(request.params, { signal: extra.signal }),
+      server.setRequestHandler('completion/complete', (request, ctx) =>
+        this.backend.complete(request.params, { signal: ctx.mcpReq.signal }),
       );
     }
     if (backendCaps?.logging) {
-      server.setRequestHandler(SetLevelRequestSchema, async (request, extra) => {
-        await this.backend.setLoggingLevel(request.params.level, { signal: extra.signal });
+      server.setRequestHandler('logging/setLevel', async (request, ctx) => {
+        await this.backend.setLoggingLevel(request.params.level, { signal: ctx.mcpReq.signal });
         return {};
       });
     }
@@ -157,30 +134,34 @@ export class GatewayProxyConfigurator {
   }
 
   private configureTools(server: Server): void {
-    server.setRequestHandler(ListToolsRequestSchema, async (request, extra) =>
+    server.setRequestHandler('tools/list', async (request, ctx) =>
       this.runProxied(
-        messageContextFromRequest('tools/list', request.params ?? {}, extra),
+        messageContextFromRequest('tools/list', request.params ?? {}, ctx),
         'tools/list',
         InterceptionEvents.ToolsList,
         request.params ?? {},
+        // request() instead of listTools(): the v2 typed list verbs aggregate
+        // every page, but the proxy must forward the caller's page verbatim.
         (params, sig) =>
-          this.backend.listTools(params as ListToolsRequest['params'], { signal: sig }),
-        extra.signal,
+          this.backend.request(
+            { method: 'tools/list', params: params as ListToolsRequest['params'] },
+            { signal: sig },
+          ),
+        ctx.mcpReq.signal,
       ),
     );
 
-    server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+    server.setRequestHandler('tools/call', async (request, ctx) => {
       const progressToken = (request.params?._meta as { progressToken?: string | number } | undefined)
         ?.progressToken;
       return this.runProxied(
-        messageContextFromRequest('tools/call', request.params, extra),
+        messageContextFromRequest('tools/call', request.params, ctx),
         'tools/call',
         InterceptionEvents.ToolsCall,
         request.params,
         (params, sig) =>
           this.backend.callTool(
             coerceParams(request, params) as CallToolRequest['params'],
-            undefined,
             {
               signal: sig,
               // Relay backend progress to the proxied caller under its own token.
@@ -198,27 +179,30 @@ export class GatewayProxyConfigurator {
                 : {}),
             },
           ),
-        extra.signal,
+        ctx.mcpReq.signal,
       );
     });
   }
 
   private configurePrompts(server: Server): void {
-    server.setRequestHandler(ListPromptsRequestSchema, async (request, extra) =>
+    server.setRequestHandler('prompts/list', async (request, ctx) =>
       this.runProxied(
-        messageContextFromRequest('prompts/list', request.params ?? {}, extra),
+        messageContextFromRequest('prompts/list', request.params ?? {}, ctx),
         'prompts/list',
         InterceptionEvents.PromptsList,
         request.params ?? {},
         (params, sig) =>
-          this.backend.listPrompts(params as ListPromptsRequest['params'], { signal: sig }),
-        extra.signal,
+          this.backend.request(
+            { method: 'prompts/list', params: params as ListPromptsRequest['params'] },
+            { signal: sig },
+          ),
+        ctx.mcpReq.signal,
       ),
     );
 
-    server.setRequestHandler(GetPromptRequestSchema, async (request, extra) =>
+    server.setRequestHandler('prompts/get', async (request, ctx) =>
       this.runProxied(
-        messageContextFromRequest('prompts/get', request.params, extra),
+        messageContextFromRequest('prompts/get', request.params, ctx),
         'prompts/get',
         InterceptionEvents.PromptsGet,
         request.params,
@@ -227,27 +211,30 @@ export class GatewayProxyConfigurator {
             coerceParams(request, params) as GetPromptRequest['params'],
             { signal: sig },
           ),
-        extra.signal,
+        ctx.mcpReq.signal,
       ),
     );
   }
 
   private configureResources(server: Server, backendCaps: ServerCapabilities): void {
-    server.setRequestHandler(ListResourcesRequestSchema, async (request, extra) =>
+    server.setRequestHandler('resources/list', async (request, ctx) =>
       this.runProxied(
-        messageContextFromRequest('resources/list', request.params ?? {}, extra),
+        messageContextFromRequest('resources/list', request.params ?? {}, ctx),
         'resources/list',
         InterceptionEvents.ResourcesList,
         request.params ?? {},
         (params, sig) =>
-          this.backend.listResources(params as ListResourcesRequest['params'], { signal: sig }),
-        extra.signal,
+          this.backend.request(
+            { method: 'resources/list', params: params as ListResourcesRequest['params'] },
+            { signal: sig },
+          ),
+        ctx.mcpReq.signal,
       ),
     );
 
-    server.setRequestHandler(ReadResourceRequestSchema, async (request, extra) =>
+    server.setRequestHandler('resources/read', async (request, ctx) =>
       this.runProxied(
-        messageContextFromRequest('resources/read', request.params, extra),
+        messageContextFromRequest('resources/read', request.params, ctx),
         'resources/read',
         InterceptionEvents.ResourcesRead,
         request.params,
@@ -256,18 +243,21 @@ export class GatewayProxyConfigurator {
             coerceParams(request, params) as ReadResourceRequest['params'],
             { signal: sig },
           ),
-        extra.signal,
+        ctx.mcpReq.signal,
       ),
     );
 
-    server.setRequestHandler(ListResourceTemplatesRequestSchema, (request, extra) =>
-      this.backend.listResourceTemplates(request.params, { signal: extra.signal }),
+    server.setRequestHandler('resources/templates/list', (request, ctx) =>
+      this.backend.request(
+        { method: 'resources/templates/list', params: request.params },
+        { signal: ctx.mcpReq.signal },
+      ),
     );
 
     if (backendCaps.resources?.subscribe) {
-      server.setRequestHandler(SubscribeRequestSchema, async (request, extra) => {
+      server.setRequestHandler('resources/subscribe', async (request, ctx) => {
         await this.runProxied(
-          messageContextFromRequest('resources/subscribe', request.params, extra),
+          messageContextFromRequest('resources/subscribe', request.params, ctx),
           'resources/subscribe',
           InterceptionEvents.ResourcesSubscribe,
           request.params,
@@ -278,13 +268,13 @@ export class GatewayProxyConfigurator {
             );
             return {};
           },
-          extra.signal,
+          ctx.mcpReq.signal,
         );
         return {};
       });
 
-      server.setRequestHandler(UnsubscribeRequestSchema, async (request, extra) => {
-        await this.backend.unsubscribeResource(request.params, { signal: extra.signal });
+      server.setRequestHandler('resources/unsubscribe', async (request, ctx) => {
+        await this.backend.unsubscribeResource(request.params, { signal: ctx.mcpReq.signal });
         return {};
       });
     }

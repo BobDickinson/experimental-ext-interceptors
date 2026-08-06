@@ -1,6 +1,6 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
+import type { Client } from "@modelcontextprotocol/client";
 
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { McpInterceptorServerConnectionOptions } from './mcp-interceptor-server-connection-options.js';
 import { connectInterceptorClient } from './connect-interceptor-client.js';
 import { GatewayResolvedInterceptorClients } from './gateway-resolved-interceptor-clients.js';

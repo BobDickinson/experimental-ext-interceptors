@@ -2,8 +2,8 @@
 // Use of this source code is governed by a Apache-2.0
 // license that can be found in the LICENSE file.
 
+import { RequestSchema, ResultSchema } from '@modelcontextprotocol/core';
 import * as z from 'zod/v4';
-import { RequestSchema, ResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InterceptorRequestMethods } from './constants.js';
 
 const InterceptorPhaseSchema = z.enum(['request', 'response']);
@@ -54,15 +54,16 @@ export const InterceptorSchema = z.object({
   _meta: z.record(z.string(), z.unknown()).optional(),
 });
 
+/** `interceptors/list` params — used directly by the v2 3-arg `setRequestHandler` form. */
+export const ListInterceptorsParamsSchema = z.object({
+  cursor: z.string().optional(),
+  event: z.string().optional(),
+  _meta: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const ListInterceptorsRequestSchema = RequestSchema.extend({
   method: z.literal(InterceptorRequestMethods.InterceptorsList),
-  params: z
-    .object({
-      cursor: z.string().optional(),
-      event: z.string().optional(),
-      _meta: z.record(z.string(), z.unknown()).optional(),
-    })
-    .optional(),
+  params: ListInterceptorsParamsSchema.optional(),
 });
 
 export const ListInterceptorsResultSchema = ResultSchema.extend({
@@ -70,18 +71,21 @@ export const ListInterceptorsResultSchema = ResultSchema.extend({
   nextCursor: z.string().optional(),
 });
 
+/** `interceptor/invoke` params — used directly by the v2 3-arg `setRequestHandler` form. */
+export const InvokeInterceptorParamsSchema = z.object({
+  name: z.string(),
+  event: z.string(),
+  phase: InterceptorPhaseSchema,
+  payload: z.unknown(),
+  config: z.unknown().optional(),
+  timeoutMs: z.number().optional(),
+  context: z.unknown().optional(),
+  _meta: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const InvokeInterceptorRequestSchema = RequestSchema.extend({
   method: z.literal(InterceptorRequestMethods.InterceptorInvoke),
-  params: z.object({
-    name: z.string(),
-    event: z.string(),
-    phase: InterceptorPhaseSchema,
-    payload: z.unknown(),
-    config: z.unknown().optional(),
-    timeoutMs: z.number().optional(),
-    context: z.unknown().optional(),
-    _meta: z.record(z.string(), z.unknown()).optional(),
-  }),
+  params: InvokeInterceptorParamsSchema,
 });
 
 const InterceptorResultBaseSchema = z.object({

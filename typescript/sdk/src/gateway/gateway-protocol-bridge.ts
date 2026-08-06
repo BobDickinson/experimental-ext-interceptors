@@ -1,20 +1,20 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
-
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import { ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
+import type { Server, ServerCapabilities } from '@modelcontextprotocol/server';
+import type { Client } from '@modelcontextprotocol/client';
 import { invokeInterceptor, listAllInterceptors } from '../client/client-extensions.js';
-import { InterceptorExtensionCapabilityKey } from '../protocol/constants.js';
-import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import {
-  InvokeInterceptorRequestSchema,
-  ListInterceptorsRequestSchema,
+  InterceptorExtensionCapabilityKey,
+  InterceptorRequestMethods,
+} from '../protocol/constants.js';
+import {
+  InvokeInterceptorParamsSchema,
+  ListInterceptorsParamsSchema,
 } from '../protocol/zod-schemas.js';
 import type {
   Interceptor,
   InterceptorsCapability,
   InvokeInterceptorRequestParams,
-  ListInterceptorsRequestParams,
 } from '../protocol/types.js';
 import { interceptorNotFoundError, isInvalidParamsError } from '../protocol/mcp-errors.js';
 
@@ -59,27 +59,37 @@ export class GatewayInterceptorProtocolBridge {
       } as ServerCapabilities);
     }
 
-    server.setRequestHandler(ListInterceptorsRequestSchema, async (request) => {
-      const params = request.params as ListInterceptorsRequestParams | undefined;
-      if (params?.cursor != null) {
-        // The bridge aggregates every host page into one response and never
-        // mints a cursor, so any incoming cursor is stale/foreign.
-        throw new McpError(ErrorCode.InvalidParams, 'Unknown interceptors/list cursor');
-      }
+    server.setRequestHandler(
+      InterceptorRequestMethods.InterceptorsList,
+      { params: ListInterceptorsParamsSchema.optional() },
+      async (params) => {
+        if (params?.cursor != null) {
+          // The bridge aggregates every host page into one response and never
+          // mints a cursor, so any incoming cursor is stale/foreign.
+          throw new ProtocolError(
+            ProtocolErrorCode.InvalidParams,
+            'Unknown interceptors/list cursor',
+          );
+        }
 
-      const aggregated: Interceptor[] = [];
-      for (const client of this.interceptorClients) {
-        const result = await listAllInterceptors(client, { event: params?.event });
-        aggregated.push(...result.interceptors);
-      }
+        const aggregated: Interceptor[] = [];
+        for (const client of this.interceptorClients) {
+          const result = await listAllInterceptors(client, { event: params?.event });
+          aggregated.push(...result.interceptors);
+        }
 
-      return { interceptors: aggregated };
-    });
+        return { interceptors: aggregated };
+      },
+    );
 
-    server.setRequestHandler(InvokeInterceptorRequestSchema, async (request) => {
-      const params = request.params as InvokeInterceptorRequestParams;
-      return (await this.invokeOnInterceptorHost(params)) as unknown as Record<string, unknown>;
-    });
+    server.setRequestHandler(
+      InterceptorRequestMethods.InterceptorInvoke,
+      { params: InvokeInterceptorParamsSchema },
+      async (params) =>
+        (await this.invokeOnInterceptorHost(
+          params as InvokeInterceptorRequestParams,
+        )) as unknown as Record<string, unknown>,
+    );
   }
 
   /** Drop cached name→client routing (e.g. after interceptor host reconnect). */

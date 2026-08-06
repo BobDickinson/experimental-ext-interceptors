@@ -4,9 +4,8 @@
  * Interceptor Server Sample — stdio MCP host with validators, mutators, and a sink.
  * Spawned by interceptor-client (or any MCP client using StdioClientTransport).
  */
-
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
+import { Server } from "@modelcontextprotocol/server";
 import { registerInterceptorsOnServer } from '../../../dist/index.js';
 import { sampleInterceptors } from './sample-interceptors.js';
 

@@ -1,17 +1,7 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
+import { Server, InMemoryTransport } from "@modelcontextprotocol/server";
+import { Client } from "@modelcontextprotocol/client";
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import {
-  CallToolRequestSchema,
-  GetPromptRequestSchema,
-  ListPromptsRequestSchema,
-  ListResourcesRequestSchema,
-  ListToolsRequestSchema,
-  ReadResourceRequestSchema,
-  SubscribeRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
 import {
   registerInterceptorsOnServer,
   type RegisteredInterceptor,
@@ -57,11 +47,11 @@ export async function connectEchoBackend(): Promise<{
     { capabilities: { tools: {} } },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, () => ({
+  server.setRequestHandler('tools/list', () => ({
     tools: [{ name: 'echo', description: 'echo', inputSchema: { type: 'object' } }],
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, (request) => {
+  server.setRequestHandler('tools/call', (request) => {
     lastCall.name = request.params.name;
     lastCall.arguments = request.params.arguments;
     return {
@@ -108,11 +98,11 @@ export async function connectRichBackend(): Promise<{
     },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, () => ({
+  server.setRequestHandler('tools/list', () => ({
     tools: [{ name: 'echo', description: 'echo', inputSchema: { type: 'object' } }],
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, (request) => {
+  server.setRequestHandler('tools/call', (request) => {
     lastToolCall.name = request.params.name;
     lastToolCall.arguments = request.params.arguments;
     const msg = request.params.arguments?.message;
@@ -121,11 +111,11 @@ export async function connectRichBackend(): Promise<{
     };
   });
 
-  server.setRequestHandler(ListPromptsRequestSchema, () => ({
+  server.setRequestHandler('prompts/list', () => ({
     prompts: [{ name: 'greet', description: 'greet' }],
   }));
 
-  server.setRequestHandler(GetPromptRequestSchema, (request) => {
+  server.setRequestHandler('prompts/get', (request) => {
     lastPromptGet.name = request.params.name;
     lastPromptGet.arguments = request.params.arguments;
     return {
@@ -138,15 +128,15 @@ export async function connectRichBackend(): Promise<{
     };
   });
 
-  server.setRequestHandler(ListResourcesRequestSchema, () => ({
+  server.setRequestHandler('resources/list', () => ({
     resources: [{ uri: 'resource://original', name: 'original' }],
   }));
 
-  server.setRequestHandler(ReadResourceRequestSchema, (request) => ({
+  server.setRequestHandler('resources/read', (request) => ({
     contents: [{ uri: request.params.uri, text: 'content' }],
   }));
 
-  server.setRequestHandler(SubscribeRequestSchema, (request) => {
+  server.setRequestHandler('resources/subscribe', (request) => {
     subscription.uri = request.params.uri;
     return {};
   });

@@ -1,6 +1,6 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
+import type { Client } from "@modelcontextprotocol/client";
 
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { throwChainFailure } from '../protocol/errors.js';
 import type {
   ExecuteChainRequestParams,

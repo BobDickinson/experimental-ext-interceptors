@@ -1,13 +1,12 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
-
 import { describe, it, expect } from 'vitest';
-import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { InterceptionEvents } from '../protocol/constants.js';
 import { validationSuccess } from '../protocol/results.js';
 import { listInterceptors, invokeInterceptor } from '../client/client-extensions.js';
 import { buildInterceptorsCapability, collectSupportedEvents } from './capabilities.js';
 import { connectInterceptorHost } from '../__tests__/fixtures/hosts.js';
 import type { RegisteredInterceptor } from './register-interceptors.js';
+import { ProtocolErrorCode } from "@modelcontextprotocol/server";
 
 const toolsValidator: RegisteredInterceptor = {
   descriptor: {
@@ -94,7 +93,7 @@ describe('registerInterceptorsOnServer', () => {
         phase: 'request',
         payload: {},
       }),
-    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams, message: /not found/i });
+    ).rejects.toMatchObject({ code: ProtocolErrorCode.InvalidParams, message: /not found/i });
 
     await close();
   });

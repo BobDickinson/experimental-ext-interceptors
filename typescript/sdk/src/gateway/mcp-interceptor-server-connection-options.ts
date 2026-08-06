@@ -1,7 +1,5 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
-
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Implementation } from '@modelcontextprotocol/sdk/types.js';
+import type { Client, Implementation } from "@modelcontextprotocol/client";
 
 export type InterceptorClientTransport = Parameters<Client['connect']>[0];
 

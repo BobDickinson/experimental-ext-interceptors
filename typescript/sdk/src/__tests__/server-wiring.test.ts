@@ -1,25 +1,18 @@
 /**
- * Integration smoke test: v1 MCP SDK server registration for interceptors/list and SEP capabilities.
+ * Integration smoke test: v2 MCP SDK server registration for interceptors/list and SEP capabilities.
  */
 import { describe, it, expect } from 'vitest';
 import * as z from 'zod/v4';
-import { Client } from '@modelcontextprotocol/sdk/client';
-import { Server } from '@modelcontextprotocol/sdk/server';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory';
-import {
-  RequestSchema,
-  ResultSchema,
-  type ServerCapabilities,
-} from '@modelcontextprotocol/sdk/types';
+import { ResultSchema } from '@modelcontextprotocol/core';
+import { Server, InMemoryTransport } from '@modelcontextprotocol/server';
+import type { ServerCapabilities } from '@modelcontextprotocol/server';
+import { Client } from '@modelcontextprotocol/client';
 
-const InterceptorsListRequestSchema = RequestSchema.extend({
-  method: z.literal('interceptors/list'),
-  params: z
-    .object({
-      event: z.string().optional(),
-    })
-    .optional(),
-});
+const InterceptorsListParamsSchema = z
+  .object({
+    event: z.string().optional(),
+  })
+  .optional();
 
 const InterceptorsListResultSchema = ResultSchema.extend({
   interceptors: z.array(
@@ -30,8 +23,8 @@ const InterceptorsListResultSchema = ResultSchema.extend({
   ),
 });
 
-describe('MCP SDK v1 server wiring', () => {
-  it('handles interceptors/list; extensions capability survives v1 client initialize parsing', async () => {
+describe('MCP SDK v2 server wiring', () => {
+  it('handles interceptors/list; extensions capability survives v2 client initialize parsing', async () => {
     const server = new Server(
       { name: 'spike-interceptor-server', version: '0.0.0' },
       { capabilities: {} },
@@ -45,9 +38,13 @@ describe('MCP SDK v1 server wiring', () => {
       },
     } as ServerCapabilities);
 
-    server.setRequestHandler(InterceptorsListRequestSchema, () => ({
-      interceptors: [{ name: 'test-validator', type: 'validation' as const }],
-    }));
+    server.setRequestHandler(
+      'interceptors/list',
+      { params: InterceptorsListParamsSchema },
+      () => ({
+        interceptors: [{ name: 'test-validator', type: 'validation' as const }],
+      }),
+    );
 
     const client = new Client(
       { name: 'spike-client', version: '0.0.0' },
@@ -60,8 +57,8 @@ describe('MCP SDK v1 server wiring', () => {
       client.connect(clientTransport),
     ]);
 
-    // v1 ServerCapabilitiesSchema has a typed `extensions` record, so the SEP-2133
-    // extensions capability round-trips through the stock v1 Client (a top-level
+    // The v2 ServerCapabilitiesSchema has a typed `extensions` record, so the SEP-2133
+    // extensions capability round-trips through the stock v2 Client (a top-level
     // `interceptor` key would be stripped by initialize parsing).
     const caps = client.getServerCapabilities() as
       | (ServerCapabilities & { extensions?: Record<string, { supportedEvents?: string[] }> })

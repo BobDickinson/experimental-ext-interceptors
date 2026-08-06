@@ -10,10 +10,10 @@ The plan distinguishes two relationships to the MCP TypeScript SDK:
 
 | Role | What | Where |
 |------|------|--------|
-| **Runtime dependency** | Code this package **imports at build and run time** | npm **`@modelcontextprotocol/sdk` v1.x** (`Client`, `Server` / `McpServer`, transports, protocol types) |
+| **Runtime dependency** | Code this package **imports at build and run time** | npm **MCP TypeScript SDK v2 packages**: `@modelcontextprotocol/client`, `@modelcontextprotocol/server` (`Client`, `Server`, transports, protocol types) and `@modelcontextprotocol/core` (spec Zod schemas) |
 | **Structural reference** | How a mature MCP TypeScript SDK **organizes** client, server, protocol, tests, and public exports | Sibling repo **`typescript-sdk`** on **main** ([`../typescript-sdk`](../../typescript-sdk) when checked out beside this repo)—**not** a dependency |
 
-Implementation targets **v1** today while following **v2-shaped** module boundaries inside a **single** published package, so a later move to `@modelcontextprotocol/client` and `@modelcontextprotocol/server` is mostly adapter rewrites rather than a redesign.
+Implementation targets the **v2** package split directly (the original v1 implementation followed v2-shaped module boundaries, which made the migration adapter rewrites rather than a redesign).
 
 ---
 
@@ -31,17 +31,15 @@ Implementation targets **v1** today while following **v2-shaped** module boundar
 - **Location:** `/typescript/sdk`, package name **`mcp-ext-interceptors`**.
 - **Preserve** existing project configuration unless there is a strong, documented reason to change it: Node **≥20**, ESM, **`tsc`** → `dist/`, **Vitest**, **ESLint**, single root **`exports`** entry.
 - **Publishing:** One npm package with logical modules under `src/` (`protocol`, `client`, `server`, `gateway`), not a multi-package monorepo like upstream `typescript-sdk`.
-- **Dependencies:** **`peerDependencies`** on `@modelcontextprotocol/sdk` **^1.x**; matching **`devDependencies`** on the same range for reproducible CI and local tests.
+- **Dependencies:** **`peerDependencies`** on `@modelcontextprotocol/client` and `@modelcontextprotocol/server` **^2.0.0** (with matching **`devDependencies`** for reproducible CI and local tests); regular **`dependencies`** on `@modelcontextprotocol/core` (spec Zod `*Schema` constants) and `zod` **^4.2.0**, both imported directly by `src/protocol`.
 
 ### 1.3 MCP TypeScript SDK strategy
 
-**Runtime (v1):** Import and use only **`@modelcontextprotocol/sdk`**. Do not depend on v2 workspace packages (`@modelcontextprotocol/client`, `@modelcontextprotocol/server`, `@modelcontextprotocol/core`). Use the MCP SDK for JSON-RPC sessions, transports, `Client` / `Server` / `McpServer`, and standard MCP types—do not reimplement core protocol plumbing.
+**Runtime (v2):** Import and use the **v2 packages**: `@modelcontextprotocol/client`, `@modelcontextprotocol/server`, and `@modelcontextprotocol/core`. Do not depend on the legacy v1 monolith (`@modelcontextprotocol/sdk`) or on `@modelcontextprotocol/core-internal`. Use the MCP SDK for JSON-RPC sessions, transports, `Client` / `Server`, and standard MCP types—do not reimplement core protocol plumbing.
 
-**Structure (v2 reference):** When making layout, naming, export, or handler-registration choices, align with conventions on **`typescript-sdk` main**: separate client vs server concerns, curated public `index` exports, Vitest layout, and explicit registration of non-spec JSON-RPC methods. Reconcile with that repo as it evolves; do not vendor or link it as a dependency.
+**Structure:** When making layout, naming, export, or handler-registration choices, align with conventions on **`typescript-sdk` main**: separate client vs server concerns, curated public `index` exports, Vitest layout, and the v2 3-arg `setRequestHandler(method, { params, result? }, handler)` form for non-spec JSON-RPC methods. Reconcile with that repo as it evolves; do not vendor or link it as a dependency.
 
-**Forward portability:** Keep interceptor-specific logic free of v1 types in `src/protocol` and `src/client/chain-orchestrator.ts`. Confine v1-only typing and handler registration to **`src/server/register-interceptors.ts`**, **`src/server/capabilities.ts`**, and **`src/client/client-extensions.ts`**. Avoid subclassing MCP SDK types in public interceptor APIs.
-
-**Later migration:** When v2 MCP packages are stable for consumers, change `peerDependencies` and those adapter modules to `@modelcontextprotocol/client` + `@modelcontextprotocol/server`. SEP DTOs, chain ordering, and gateway orchestration concepts should remain unchanged.
+**Adapter seams:** Keep interceptor-specific logic free of MCP SDK types in `src/protocol` and `src/client/chain-orchestrator.ts`. Confine SDK-specific typing and handler registration to **`src/server/register-interceptors.ts`**, **`src/server/capabilities.ts`**, and **`src/client/client-extensions.ts`**. Avoid subclassing MCP SDK types in public interceptor APIs. SEP DTOs, chain ordering, and gateway orchestration concepts are SDK-version independent.
 
 ### 1.4 Capability advertisement (TypeScript default)
 
@@ -100,7 +98,7 @@ Per the SEP (SEP-2133 extensions format), interceptor hosts include:
 
 The key is exported as **`InterceptorExtensionCapabilityKey`**. The C# Interceptor SDK advertises the same shape under the same key, so mixed deployments interoperate without dual-read logic.
 
-**Discovery with v1 `@modelcontextprotocol/sdk` Client:** The server should set capability via `registerCapabilities` (see §5). The stock v1 **`Client`** parses `initialize` with `ServerCapabilitiesSchema`, which includes a typed **`extensions`** record, so **`getServerCapabilities().extensions["io.modelcontextprotocol/interceptors"]`** survives parsing and is a reliable discovery path. **`interceptors/list`** (or handling a standard JSON-RPC error when unsupported) remains a valid fallback.
+**Discovery with the stock `@modelcontextprotocol/client` Client:** The server should set capability via `registerCapabilities` (see §5). The stock **`Client`** parses `initialize` with `ServerCapabilitiesSchema`, which includes a typed **`extensions`** record, so **`getServerCapabilities().extensions["io.modelcontextprotocol/interceptors"]`** survives parsing and is a reliable discovery path. **`interceptors/list`** (or handling a standard JSON-RPC error when unsupported) remains a valid fallback.
 
 ---
 
@@ -119,11 +117,11 @@ Primary behavioral reference for parity:
 | Gateway | `McpInterceptorGateway`, `InterceptorChainRunner`, transparent proxy + optional SEP passthrough |
 | Init capability | `Extensions["interceptors"]` (not SEP’s top-level `interceptor` field) |
 
-TypeScript uses **`Server.setRequestHandler`** for extension methods where C# uses incoming **message filters**, because the v1 TypeScript SDK exposes handler registration publicly.
+TypeScript uses **`Server.setRequestHandler`** for extension methods where C# uses incoming **message filters**, because the TypeScript SDK exposes handler registration publicly.
 
 ### 4.2 TypeScript package today
 
-The SDK is **implemented** end-to-end: protocol types, client extensions and chain orchestration (including multi-host merge), interceptor host registration, reflection helpers, transparent gateway, runnable examples, and package **README**. **73 Vitest tests**; `npm run build`, `npm test`, and `npm run lint` are green.
+The SDK is **implemented** end-to-end: protocol types, client extensions and chain orchestration (including multi-host merge), interceptor host registration, reflection helpers, transparent gateway, runnable examples, and package **README**. **91 Vitest tests**; `npm run build`, `npm test`, and `npm run lint` are green.
 
 Build: `tsc -p tsconfig.build.json` → `dist/`; lint uses `tsconfig.eslint.json` (includes test files).
 
@@ -133,14 +131,14 @@ Build: `tsc -p tsconfig.build.json` → `dist/`; lint uses `tsconfig.eslint.json
 
 | Area | C# | TypeScript today |
 |------|-----|------------------|
-| Init capability wire shape | `extensions["interceptors"]` | SEP `capabilities.interceptor` (documented; README) |
+| Init capability wire shape | `extensions["interceptors"]` | SEP-2133 `capabilities.extensions["io.modelcontextprotocol/interceptors"]` (§3, README) |
 | Server registration | `InterceptorMessageFilter` on incoming messages | `Server.setRequestHandler` for extension methods (§4.1) |
 | Builder / host helpers | `IMcpServerBuilder`, filter pipeline | `registerInterceptorsOnServer` only (no separate `interceptor-host.ts` helper) |
 | `InterceptingMcpClient` tests | Broad gateway-overlap scenarios | One E2E: `tools/call` request mutation; API covers list/prompts/resources/subscribe |
 | `McpInterceptorGateway` | ASP.NET `WithInterceptorGateway` builder extensions | `createAsync`, `interceptorServerConnections`, `interceptorServerConnectionResolver`, `dispose` (no DI builder) |
 | Gateway tests | `McpInterceptorGatewayTests` + `GatewayComponentsTests` | 13 gateway integration tests (subset of full C# matrix) |
-| Validation over transparent proxy | In-process exception types | JSON-RPC `McpError` to connecting clients (not `McpInterceptorValidationException`) |
-| `serverInfo` override | `McpServerOptions.ServerInfo` | `McpInterceptorGatewayOptions.serverInfo` documented; v1 `Server` identity is fixed at `new Server(...)` construction |
+| Validation over transparent proxy | In-process exception types | JSON-RPC `ProtocolError` to connecting clients (not `McpInterceptorValidationException`) |
+| `serverInfo` override | `McpServerOptions.ServerInfo` | `McpInterceptorGatewayOptions.serverInfo` documented; `Server` identity is fixed at `new Server(...)` construction |
 | `GatewayChainSample` | Two stdio interceptor clients + nested `InterceptingMcpClient` | `examples/gateway-chain` is a **simplified** walkthrough; use `McpInterceptorGateway` with `interceptorClients: [first, second]` for ordered multi-host chains |
 | LLM completion | Protocol + samples | `LlmCompletion*` **types** only; no `llm/completion` client/gateway wiring |
 | Examples packaging | Per-sample `.csproj` | `interceptor-server` and `interceptor-client` have `package.json`; other examples are single `src/index.ts` + root `npm run example:*` |
@@ -177,61 +175,59 @@ Relevant patterns to mirror:
 
 - **Modules:** `protocol`-like types in `src/protocol`; client patterns in `src/client`; server patterns in `src/server`; gateway in `src/gateway`.
 - **Public API:** Named exports only from the package entry; no wildcard re-exports; new exports are API commitments (see `packages/client/src/index.ts` and `packages/server/src/index.ts`).
-- **Custom methods (v2 shape):** `setRequestHandler('method', { params, result }, handler)` on `Protocol` / `Server`—the target shape when migrating off v1.
+- **Custom methods (v2 shape):** `setRequestHandler('method', { params, result }, handler)` on `Protocol` / `Server`—the form this package uses for `interceptors/list` and `interceptor/invoke`.
 - **Tooling reference:** Vitest workspace, TypeScript 5.9.x, ESLint 9—upgrade this package’s Vitest only when there is clear benefit.
 
-Upstream publishes **multiple** packages (`@modelcontextprotocol/client`, `@modelcontextprotocol/server`, private `@modelcontextprotocol/core`). This interceptor package stays **one** artifact with v2-**shaped** folders inside `src/`.
+Upstream publishes **multiple** packages (`@modelcontextprotocol/client`, `@modelcontextprotocol/server`, `@modelcontextprotocol/core`, private `@modelcontextprotocol/core-internal`). This interceptor package stays **one** artifact with v2-**shaped** folders inside `src/`.
 
 ---
 
-## 5. Integration with `@modelcontextprotocol/sdk` (v1)
+## 5. Integration with the MCP TypeScript SDK v2 packages
 
-Pinned baseline for design decisions: **v1.29.x** (representative of **^1.x**).
+Pinned baseline for design decisions: **v2.0.0** (`@modelcontextprotocol/client` / `@modelcontextprotocol/server` / `@modelcontextprotocol/core`).
 
 ### 5.1 Surfaces used
 
-| Concern | v1 API | Interceptor usage |
+| Concern | v2 API | Interceptor usage |
 |---------|--------|-------------------|
-| Client | `Client`, transports (`InMemoryTransport`, stdio, HTTP/SSE as needed) | Extension requests; `InterceptingMcpClient` to backend + interceptor hosts |
-| Interceptor host | `Server`, `McpServer` (`mcpServer.server` for registration) | `interceptors/list`, `interceptor/invoke`; capability merge on `initialize` |
-| Types | `RequestSchema`, `ResultSchema`, MCP tool/resource/prompt types | Payloads and Zod schemas for extension methods |
+| Client | `Client` from `@modelcontextprotocol/client`, transports (`InMemoryTransport`, `@modelcontextprotocol/client/stdio`, HTTP as needed) | Extension requests; `InterceptingMcpClient` to backend + interceptor hosts |
+| Interceptor host | `Server` from `@modelcontextprotocol/server` | `interceptors/list`, `interceptor/invoke`; capability merge on `initialize` |
+| Types | `RequestSchema` / `ResultSchema` from `@modelcontextprotocol/core`; MCP tool/resource/prompt types from `@modelcontextprotocol/client` or `/server` | Payloads and Zod schemas for extension methods |
 | Out of scope | — | JSON-RPC framing, session lifecycle, core MCP method dispatch |
 
-Import subpaths: `@modelcontextprotocol/sdk/client`, `/server`, `/inMemory`, `/types` (as supported by the package exports map).
+Stdio transports live on the `./stdio` subpaths (`@modelcontextprotocol/client/stdio`, `@modelcontextprotocol/server/stdio`); the package roots stay runtime-neutral. `InMemoryTransport` is exported from both packages — both halves of a linked pair must come from the same package's import.
 
 ### 5.2 Registering extension methods on the server
 
-v1 **`Server.setRequestHandler`** takes a **Zod request schema** (with a **`method` literal**), not v2’s three-argument `(method, { params, result }, handler)` form.
+v2 **`Server.setRequestHandler`** registers custom (non-spec) methods with the three-argument `(method, { params, result? }, handler)` form; the handler receives the **parsed params**, not the request envelope.
 
 ```ts
 import * as z from 'zod/v4';
-import { RequestSchema, ResultSchema } from '@modelcontextprotocol/sdk/types';
-import { Server } from '@modelcontextprotocol/sdk/server';
+import { Server } from '@modelcontextprotocol/server';
 
-const InterceptorsListRequestSchema = RequestSchema.extend({
-  method: z.literal('interceptors/list'),
-  params: z.object({ event: z.string().optional() }).optional(),
-});
+const InterceptorsListParamsSchema = z
+  .object({ event: z.string().optional() })
+  .optional();
 
-const InterceptorsListResultSchema = ResultSchema.extend({
-  interceptors: z.array(/* Interceptor descriptor schema */),
-});
-
-server.setRequestHandler(InterceptorsListRequestSchema, async (request) => {
-  return { interceptors: [] };
-});
+server.setRequestHandler(
+  'interceptors/list',
+  { params: InterceptorsListParamsSchema },
+  async (params) => {
+    return { interceptors: [] };
+  },
+);
 ```
 
-Apply the same pattern for **`interceptor/invoke`** with params and result schemas aligned to SEP and `src/protocol` types.
+Apply the same pattern for **`interceptor/invoke`** with a params schema aligned to SEP and `src/protocol` types (`ListInterceptorsParamsSchema` / `InvokeInterceptorParamsSchema` in `src/protocol/zod-schemas.ts`).
 
-**Capability checks:** v1 `assertRequestHandlerCapability` only validates known spec methods. **`interceptors/list`** and **`interceptor/invoke`** are outside that switch and require **no** extra capability flag for handler registration to succeed.
+**Capability checks:** custom method names are outside the spec-method capability switch and require **no** extra capability flag for handler registration to succeed.
 
 Implement registration in **`src/server/register-interceptors.ts`** only.
 
 ### 5.3 Advertising the interceptors extensions capability
 
 ```ts
-import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types';
+import type { ServerCapabilities } from '@modelcontextprotocol/server';
 import { InterceptorExtensionCapabilityKey } from 'mcp-ext-interceptors';
 
 server.registerCapabilities({
@@ -243,7 +239,7 @@ server.registerCapabilities({
 
 `mergeCapabilities` shallow-merges into internal server state (the `extensions` record merges key-wise, so other extensions are preserved); **`initialize`** returns `getCapabilities()` unchanged, so the capability appears on the wire. Confine the `ServerCapabilities` assertion to **`src/server/capabilities.ts`**.
 
-Do **not** advertise a top-level `capabilities.interceptor`—earlier drafts used that key, but it is not the SEP shape and the stock v1 Client strips it during `initialize` parsing.
+Do **not** advertise a top-level `capabilities.interceptor`—earlier drafts used that key, but it is not the SEP shape and the stock Client strips it during `initialize` parsing.
 
 ### 5.4 Client extension requests
 
@@ -256,17 +252,17 @@ await client.request(
 
 Implement in **`src/client/client-extensions.ts`**. Deserialize into types from **`src/protocol`**.
 
-### 5.5 Migration to v2 MCP packages (expected touch points)
+### 5.5 v2 migration notes (completed)
 
-When switching runtime dependency to `@modelcontextprotocol/client` + `@modelcontextprotocol/server`:
+The package originally targeted the v1 monolith (`@modelcontextprotocol/sdk` ^1.x) and was migrated to the v2 packages. Decisions worth knowing when reviewing the code:
 
-1. `package.json` peer (and dev) dependencies and import paths.
-2. **`src/server/register-interceptors.ts`** — adopt `setRequestHandler(method, { params, result }, handler)`.
-3. **`src/server/capabilities.ts`** — re-check capability types and merge APIs in v2 core.
-4. **`src/client/client-extensions.ts`** — client `request` typing and imports.
-5. Test transport imports.
+1. Custom method registration uses the v2 3-arg `setRequestHandler(method, { params }, handler)` form; result schemas are deliberately **not** passed so the server does not re-validate (or transform) handler output — matching the v1 behavior.
+2. Client-side custom requests keep an **explicit result schema** (`client.request(req, schema, options)`), which v2 still supports for non-spec methods.
+3. The gateway forwards paginated list methods via `client.request(...)` instead of the typed list verbs, because the v2 verbs auto-aggregate every page and the proxy must forward the caller's page verbatim.
+4. `InterceptingMcpClient.callTool` uses `client.request(..., CompatibilityCallToolResultSchema, ...)` since v2 `callTool()` no longer accepts a result schema and this client keeps v1's tolerant legacy-result parsing.
+5. `McpError` / `ErrorCode` are now `ProtocolError` / `ProtocolErrorCode`. Cross-package error matching (client vs server bundles) uses `code`-field checks, not `instanceof` (see `isInvalidParamsError`).
 
-**Unchanged across migration:** `src/protocol/*`, `src/client/chain-orchestrator.ts`, gateway orchestration design, SEP ordering semantics.
+**Unchanged across the migration:** `src/protocol/*` DTOs, `src/client/chain-orchestrator.ts`, gateway orchestration design, SEP ordering semantics.
 
 ---
 
@@ -299,7 +295,7 @@ src/
   __tests__/
     fixtures/hosts.ts           # connectInterceptorHost, connectEchoBackend
     integration/                # client-extensions, intercepting-client, mcp-interceptor-gateway
-    v1-server-wiring.test.ts
+    server-wiring.test.ts
 ```
 
 Cross-language naming:
@@ -314,7 +310,7 @@ Also: `listInterceptors`, `invokeInterceptor`.
 **Tests** (Vitest; co-located with sources where practical):
 
 - Unit: `src/protocol/protocol.test.ts`, `src/client/chain-orchestrator.test.ts`, `src/server/reflection.test.ts`, `src/server/register-interceptors.test.ts`
-- Integration / E2E: `src/__tests__/integration/*.test.ts`, `src/__tests__/v1-server-wiring.test.ts`
+- Integration / E2E: `src/__tests__/integration/*.test.ts`, `src/__tests__/server-wiring.test.ts`
 - Shared fixtures: `src/__tests__/fixtures/hosts.ts` (`connectInterceptorHost`, `connectEchoBackend`)
 
 Optional future layout: `__tests__/protocol/` golden JSON; rename fixtures to `buildInterceptorHost` / `buildTestBackend` aliases.
@@ -436,7 +432,7 @@ Integration and gateway tests use these helpers so registration and capability s
 
 **End-to-end:** `InterceptingMcpClient` with fixture backend + host—covered for `tools/call`; other wrapped operations are API-complete but not all covered by dedicated E2E tests yet.
 
-**Gateway:** `tools/list` and `tools/call` forwarding, chain mutation, validation abort (as `McpError` over JSON-RPC), `exposeInterceptorProtocol` list aggregation, multi-host merge scenarios.
+**Gateway:** `tools/list` and `tools/call` forwarding, chain mutation, validation abort (as `ProtocolError` over JSON-RPC), `exposeInterceptorProtocol` list aggregation, multi-host merge scenarios.
 
 **Current total:** 73 Vitest tests. CI runs all tests on every change.
 
@@ -482,7 +478,7 @@ Runnable examples mirror the **C# Interceptor SDK** layout in [`csharp/sdk/sampl
 
 ### 10.5 Implementation notes
 
-- **Dependencies:** Examples depend on `mcp-ext-interceptors` (workspace/`file:`), `@modelcontextprotocol/sdk`, and Node stdio transports—no example-only dependency on the C# SDK.
+- **Dependencies:** Examples depend on `mcp-ext-interceptors` (workspace/`file:`), the v2 MCP packages (`@modelcontextprotocol/client` / `@modelcontextprotocol/server`), and Node stdio transports—no example-only dependency on the C# SDK.
 - **Scripts:** Root `package.json` exposes `npm run example:*` for all five samples; spawning examples embed child `command`/`args` like C#.
 - **Shared interceptors:** Prefer importing or duplicating minimal handler definitions from test fixtures so examples and tests do not diverge.
 - **Gateway examples:** Spawn `interceptor-server` and stub backend via stdio client transport inside the gateway/proxy process—the same as C# `StdioClientTransport` + `dotnet run --project …`.

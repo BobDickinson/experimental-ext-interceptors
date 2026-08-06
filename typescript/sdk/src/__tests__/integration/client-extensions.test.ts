@@ -9,11 +9,10 @@ import {
   listAllInterceptors,
   listInterceptors,
 } from '../../client/client-extensions.js';
+import { Server, InMemoryTransport } from "@modelcontextprotocol/server";
+import { Client } from "@modelcontextprotocol/client";
 import { connectInterceptorHost } from '../fixtures/hosts.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { ListInterceptorsRequestSchema } from '../../protocol/zod-schemas.js';
+import { ListInterceptorsParamsSchema } from '../../protocol/zod-schemas.js';
 import type { Interceptor } from '../../protocol/types.js';
 
 describe('client extensions integration', () => {
@@ -128,12 +127,14 @@ describe('client extensions integration', () => {
       { name: 'paginating-host', version: '0.0.0' },
       { capabilities: {} },
     );
-    server.setRequestHandler(ListInterceptorsRequestSchema, (request) => {
-      const cursor = (request.params as { cursor?: string } | undefined)?.cursor;
-      return cursor === 'page-2'
-        ? { interceptors: pageTwo }
-        : { interceptors: pageOne, nextCursor: 'page-2' };
-    });
+    server.setRequestHandler(
+      'interceptors/list',
+      { params: ListInterceptorsParamsSchema.optional() },
+      (params) =>
+        params?.cursor === 'page-2'
+          ? { interceptors: pageTwo }
+          : { interceptors: pageOne, nextCursor: 'page-2' },
+    );
 
     const client = new Client({ name: 'test-client', version: '0.0.0' }, { capabilities: {} });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

@@ -1,8 +1,8 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
 // Use of this source code is governed by a Apache-2.0
 // license that can be found in the LICENSE file.
+import type { Client } from "@modelcontextprotocol/client";
 
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { executeInterceptorChainOnClients } from './execute-interceptor-chain-on-clients.js';
 import { InterceptorRequestMethods } from '../protocol/constants.js';
 import {

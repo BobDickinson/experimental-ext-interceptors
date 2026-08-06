@@ -1,15 +1,7 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
+import { CompatibilityCallToolResultSchema } from "@modelcontextprotocol/core";
+import type { Client, CallToolResult, GetPromptResult, ListPromptsResult, ListResourcesResult, ListToolsResult, ReadResourceResult } from "@modelcontextprotocol/client";
 
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import {
-  CompatibilityCallToolResultSchema,
-  type CallToolResult,
-  type GetPromptResult,
-  type ListPromptsResult,
-  type ListResourcesResult,
-  type ListToolsResult,
-  type ReadResourceResult,
-} from '@modelcontextprotocol/sdk/types.js';
 import { InterceptionEvents } from '../protocol/constants.js';
 import type {
   InvokeInterceptorContext,
@@ -51,10 +43,12 @@ export class InterceptingMcpClient {
     args?: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<CallToolResult> {
+    // request() with the compatibility schema: v2 callTool() no longer takes a
+    // result schema, and this client keeps v1's tolerant legacy-result parsing.
     const resultSchema = CompatibilityCallToolResultSchema;
     if (!this.chainRunner.shouldIntercept(InterceptionEvents.ToolsCall)) {
-      return (await this.inner.callTool(
-        { name, arguments: args },
+      return (await this.inner.request(
+        { method: 'tools/call', params: { name, arguments: args } },
         resultSchema,
         { signal },
       )) as CallToolResult;
@@ -84,8 +78,8 @@ export class InterceptingMcpClient {
     // (e.g. redaction) must not have the original arguments restored.
     const mutated = requestPayload as { name: string; arguments?: Record<string, unknown> };
 
-    const result = await this.inner.callTool(
-      { name: mutated.name, arguments: mutated.arguments },
+    const result = await this.inner.request(
+      { method: 'tools/call', params: { name: mutated.name, arguments: mutated.arguments } },
       resultSchema,
       { signal },
     );

@@ -2,12 +2,12 @@
 
 TypeScript implementation of [SEP-2624](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/2624) — gateway-level interceptors for the [Model Context Protocol](https://modelcontextprotocol.io/).
 
-Requires **`@modelcontextprotocol/sdk` v1.x** as a peer dependency.
+Requires the **MCP TypeScript SDK v2 packages** (`@modelcontextprotocol/client`, `@modelcontextprotocol/server`) as peer dependencies.
 
 ## Installation
 
 ```bash
-npm install mcp-ext-interceptors @modelcontextprotocol/sdk
+npm install mcp-ext-interceptors @modelcontextprotocol/client @modelcontextprotocol/server
 ```
 
 ## Overview
@@ -22,8 +22,8 @@ An **interceptor host** is a normal MCP server that exposes `interceptors/list` 
 ## Quick start — interceptor host (stdio)
 
 ```typescript
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { Server } from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import {
   registerInterceptorsOnServer,
   InterceptionEvents,
@@ -84,8 +84,8 @@ Avoid `(...rest) =>` and relying on default parameters alone; use `(params) =>` 
 ## Quick start — client API
 
 ```typescript
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import {
   listInterceptors,
   invokeInterceptor,
@@ -133,9 +133,9 @@ const result = await gateway.callTool('echo', { message: 'hello' });
 ## Quick start — transparent proxy (`McpInterceptorGateway`)
 
 ```typescript
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { Client } from '@modelcontextprotocol/client';
+import { Server } from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { McpInterceptorGateway } from 'mcp-ext-interceptors';
 
 const gateway = new McpInterceptorGateway({

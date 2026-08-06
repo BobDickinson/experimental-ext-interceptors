@@ -2,8 +2,8 @@
  * Chained interceptors — two interceptor hosts in sequence before the backend.
  * C# equivalent: GatewayChainSample (simplified with in-process ordering via gateway options).
  */
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { Client } from "@modelcontextprotocol/client";
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {

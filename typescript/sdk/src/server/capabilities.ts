@@ -1,7 +1,6 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
+import type { Server, ServerCapabilities } from "@modelcontextprotocol/server";
 
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 import { InterceptionEvents, InterceptorExtensionCapabilityKey } from '../protocol/constants.js';
 import type { Interceptor, InterceptorsCapability } from '../protocol/types.js';
 
@@ -24,7 +23,7 @@ export function buildInterceptorsCapability(interceptors: Interceptor[]): Interc
   };
 }
 
-/** Merge SEP `capabilities.extensions["io.modelcontextprotocol/interceptors"]` onto a v1 MCP server. */
+/** Merge SEP `capabilities.extensions["io.modelcontextprotocol/interceptors"]` onto an MCP server. */
 export function registerInterceptorCapabilities(
   server: Server,
   interceptors: Interceptor[],
@@ -34,5 +33,5 @@ export function registerInterceptorCapabilities(
     extensions: {
       [InterceptorExtensionCapabilityKey]: capability,
     },
-  } as ServerCapabilities);
+  } as unknown as ServerCapabilities);
 }

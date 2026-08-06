@@ -1,11 +1,8 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
-
+import { Server, InMemoryTransport, ProtocolError } from "@modelcontextprotocol/server";
+import { Client } from "@modelcontextprotocol/client";
 import { describe, it, expect } from 'vitest';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { InterceptorClientTransport } from '../../gateway/mcp-interceptor-server-connection-options.js';
-import { McpError, ResourceUpdatedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import { InterceptionEvents } from '../../protocol/constants.js';
 import { validationFailure, validationSuccess } from '../../protocol/results.js';
 import { listInterceptors } from '../../client/client-extensions.js';
@@ -150,9 +147,9 @@ describe('McpInterceptorGateway', () => {
     await expect(
       proxy.proxyClient.callTool({ name: 'echo', arguments: {} }),
     ).rejects.toSatisfy((err: unknown) => {
-      expect(err).toBeInstanceOf(McpError);
-      expect((err as McpError).message).toMatch(/blocker.*reported invalid/i);
-      expect((err as McpError).message).toContain('blocked by gateway test');
+      expect(err).toBeInstanceOf(ProtocolError);
+      expect((err as ProtocolError).message).toMatch(/blocker.*reported invalid/i);
+      expect((err as ProtocolError).message).toContain('blocked by gateway test');
       return true;
     });
 
@@ -550,7 +547,7 @@ describe('McpInterceptorGateway', () => {
     const proxy = await connectGatewayProxy(gateway);
 
     const updated = new Promise<{ uri: string }>((resolve) => {
-      proxy.proxyClient.setNotificationHandler(ResourceUpdatedNotificationSchema, (n) => {
+      proxy.proxyClient.setNotificationHandler('notifications/resources/updated', (n) => {
         resolve({ uri: n.params.uri });
       });
     });

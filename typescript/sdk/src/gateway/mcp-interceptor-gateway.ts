@@ -1,15 +1,7 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
+import type { Server, Implementation } from "@modelcontextprotocol/server";
+import type { Client } from "@modelcontextprotocol/client";
 
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import {
-  LoggingMessageNotificationSchema,
-  PromptListChangedNotificationSchema,
-  ResourceListChangedNotificationSchema,
-  ResourceUpdatedNotificationSchema,
-  ToolListChangedNotificationSchema,
-  type Implementation,
-} from '@modelcontextprotocol/sdk/types.js';
 import type { InvokeInterceptorContext } from '../protocol/types.js';
 import { connectInterceptorClient } from './connect-interceptor-client.js';
 import {
@@ -182,7 +174,7 @@ export class McpInterceptorGateway {
     const backendCaps = this.backendClient.getServerCapabilities();
 
     if (backendCaps?.tools?.listChanged) {
-      this.backendClient.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+      this.backendClient.setNotificationHandler('notifications/tools/list_changed', async () => {
         await proxyServer.sendToolListChanged();
       });
       this.notificationCleanups.push(() =>
@@ -191,7 +183,7 @@ export class McpInterceptorGateway {
     }
 
     if (backendCaps?.prompts?.listChanged) {
-      this.backendClient.setNotificationHandler(PromptListChangedNotificationSchema, async () => {
+      this.backendClient.setNotificationHandler('notifications/prompts/list_changed', async () => {
         await proxyServer.sendPromptListChanged();
       });
       this.notificationCleanups.push(() =>
@@ -200,7 +192,7 @@ export class McpInterceptorGateway {
     }
 
     if (backendCaps?.resources?.listChanged) {
-      this.backendClient.setNotificationHandler(ResourceListChangedNotificationSchema, async () => {
+      this.backendClient.setNotificationHandler('notifications/resources/list_changed', async () => {
         await proxyServer.sendResourceListChanged();
       });
       this.notificationCleanups.push(() =>
@@ -211,7 +203,7 @@ export class McpInterceptorGateway {
     if (backendCaps?.resources?.subscribe) {
       // Without this relay, proxied resources/subscribe would be a silent no-op.
       this.backendClient.setNotificationHandler(
-        ResourceUpdatedNotificationSchema,
+        'notifications/resources/updated',
         async (notification) => {
           await proxyServer.sendResourceUpdated(notification.params);
         },
@@ -223,7 +215,7 @@ export class McpInterceptorGateway {
 
     if (backendCaps?.logging) {
       this.backendClient.setNotificationHandler(
-        LoggingMessageNotificationSchema,
+        'notifications/message',
         async (notification) => {
           await proxyServer.sendLoggingMessage(notification.params);
         },
