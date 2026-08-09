@@ -40,7 +40,15 @@ export function registerInterceptorsOnServer(
 ): void {
   const registerCaps = options?.registerCapabilities !== false;
   const descriptors = interceptors.map((e) => e.descriptor);
-  const byName = new Map(interceptors.map((e) => [e.descriptor.name, e]));
+  const byName = new Map<string, RegisteredInterceptor>();
+  for (const entry of interceptors) {
+    if (byName.has(entry.descriptor.name)) {
+      // A silent Map overwrite would make interceptor/invoke dispatch to the
+      // wrong handler; duplicate names are a registration-time bug.
+      throw new Error(`Duplicate interceptor name: '${entry.descriptor.name}'`);
+    }
+    byName.set(entry.descriptor.name, entry);
+  }
 
   if (registerCaps) {
     registerInterceptorCapabilities(server, descriptors);

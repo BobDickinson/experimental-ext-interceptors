@@ -1,5 +1,5 @@
 // Copyright 2025 The MCP Interceptors Authors. All rights reserved.
-// Use of this source code is governed by a Apache-2.0
+// Use of this source code is governed by an Apache-2.0
 // license that can be found in the LICENSE file.
 
 import { RequestSchema, ResultSchema } from '@modelcontextprotocol/core';
@@ -31,7 +31,7 @@ export const InterceptorOverridesSchema = z.object({
   failOpen: z.boolean().optional(),
   priorityHint: PriorityHintSchema.optional(),
   mode: InterceptorModeSchema.optional(),
-  timeoutMs: z.number().optional(),
+  timeoutMs: z.number().int().nonnegative().optional(),
   hooks: z.array(InterceptorHookSchema).optional(),
 });
 
@@ -78,7 +78,7 @@ export const InvokeInterceptorParamsSchema = z.object({
   phase: InterceptorPhaseSchema,
   payload: z.unknown(),
   config: z.unknown().optional(),
-  timeoutMs: z.number().optional(),
+  timeoutMs: z.number().int().nonnegative().optional(),
   context: z.unknown().optional(),
   _meta: z.record(z.string(), z.unknown()).optional(),
 });

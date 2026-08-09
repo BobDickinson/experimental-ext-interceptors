@@ -5,7 +5,8 @@ import { validationSuccess } from '../protocol/results.js';
 import { listInterceptors, invokeInterceptor } from '../client/client-extensions.js';
 import { buildInterceptorsCapability, collectSupportedEvents } from './capabilities.js';
 import { connectInterceptorHost } from '../__tests__/fixtures/hosts.js';
-import type { RegisteredInterceptor } from './register-interceptors.js';
+import { registerInterceptorsOnServer, type RegisteredInterceptor } from './register-interceptors.js';
+import { Server } from '@modelcontextprotocol/server';
 import { ProtocolErrorCode } from "@modelcontextprotocol/server";
 
 const toolsValidator: RegisteredInterceptor = {
@@ -79,6 +80,34 @@ describe('registerInterceptorsOnServer', () => {
 
     expect(result.type).toBe('validation');
     expect(result.interceptor).toBe('echo-val');
+
+    await close();
+  });
+
+  it('rejects duplicate interceptor names at registration time', () => {
+    const server = new Server({ name: 'dup-host', version: '0.0.0' }, { capabilities: {} });
+    const duplicate: RegisteredInterceptor = {
+      descriptor: { ...toolsValidator.descriptor },
+      handler: () => validationSuccess('request'),
+    };
+
+    expect(() => registerInterceptorsOnServer(server, [toolsValidator, duplicate])).toThrow(
+      /duplicate interceptor name: 'tools-only'/i,
+    );
+  });
+
+  it('invoke rejects a negative timeoutMs with -32602 before reaching the handler', async () => {
+    const { client, close } = await connectInterceptorHost([toolsValidator]);
+
+    await expect(
+      invokeInterceptor(client, {
+        name: 'tools-only',
+        event: InterceptionEvents.ToolsCall,
+        phase: 'request',
+        payload: {},
+        timeoutMs: -5,
+      }),
+    ).rejects.toMatchObject({ code: ProtocolErrorCode.InvalidParams });
 
     await close();
   });
