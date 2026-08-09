@@ -99,6 +99,54 @@ describe('defineInterceptor / reflection', () => {
     }
   });
 
+  it('binds a parameter named `signal` to the abort signal', async () => {
+    const controller = new AbortController();
+    let seenSignal: unknown = 'unset';
+
+    const handler: InterceptorHandlerFn = ((
+      payload: unknown,
+      event: unknown,
+      phase: unknown,
+      context: unknown,
+      signal: unknown,
+    ) => {
+      seenSignal = signal;
+      return validationSuccess(phase as 'request' | 'response');
+    }) as InterceptorHandlerFn;
+
+    await invokeHandlerFunction(
+      handler,
+      'validation',
+      {
+        name: 'x',
+        event: InterceptionEvents.ToolsCall,
+        phase: 'request',
+        payload: {},
+      },
+      controller.signal,
+    );
+    expect(seenSignal).toBe(controller.signal);
+  });
+
+  it('binds named parameters that carry default values', async () => {
+    let seenPayload: unknown = 'unset';
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handler: InterceptorHandlerFn = ((payload: any = {}, phase = 'request') => {
+      seenPayload = payload;
+      return validationSuccess(phase as 'request' | 'response');
+    }) as InterceptorHandlerFn;
+
+    const result = await invokeHandlerFunction(handler, 'validation', {
+      name: 'x',
+      event: InterceptionEvents.ToolsCall,
+      phase: 'response',
+      payload: { marker: 42 },
+    });
+    expect(seenPayload).toEqual({ marker: 42 });
+    expect(result.phase).toBe('response');
+  });
+
   it('supports async handlers', async () => {
     const reg = defineInterceptor(
       { name: 'async-val', type: 'validation' },

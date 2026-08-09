@@ -79,6 +79,7 @@ function bindHandlerArguments(
     ['eventname', request.event],
     ['phase', request.phase],
     ['context', request.context],
+    ['signal', signal],
     ['cancellationtoken', signal],
     ['ct', signal],
   ]);
@@ -120,7 +121,16 @@ function getParameterNames(fn: InterceptorHandlerFn): string[] {
   }
   return match[1]
     .split(',')
-    .map((p) => p.trim().split(/\s/)[0]?.replace(/[?[\]]/g, '') ?? '')
+    .map(
+      (p) =>
+        p
+          .trim()
+          .replace(/^\.\.\./, '')
+          // Cut at the first `=` or whitespace so default values (`payload={}`,
+          // `phase = 'request'`) don't leak into the parameter name.
+          .split(/[=\s]/)[0]
+          ?.replace(/[?[\]]/g, '') ?? '',
+    )
     .filter((n) => n.length > 0 && n !== '');
 }
 
