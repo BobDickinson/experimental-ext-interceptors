@@ -54,7 +54,7 @@ export class GatewayInterceptorProtocolBridge {
       server.registerCapabilities({
         extensions: {
           [InterceptorExtensionCapabilityKey]: {
-            supportedEvents: [...allEvents],
+            supportedEvents: [...allEvents].sort(),
           },
         },
       } as ServerCapabilities);

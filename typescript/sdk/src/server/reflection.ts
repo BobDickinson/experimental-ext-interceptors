@@ -28,7 +28,10 @@ export type InterceptorHandlerFn = (...args: unknown[]) =>
  *
  * - `(params) =>` where `params` receives the full {@link InvokeInterceptorRequestParams}
  * - `({ payload, phase, context }) =>` — destructuring from that same object
- * - `(payload, event, phase, context, signal) =>` — positional by arity
+ * - `(payload, event, phase, context, signal) =>` — any subset, matched by name
+ *
+ * Handlers whose parameter names are all unrecognized fall back to positional binding
+ * by arity: payload, event, phase, context, signal.
  *
  * Avoid `(...rest) =>` and default-parameter-only signatures; use `(params) =>` instead.
  */
@@ -73,6 +76,8 @@ function bindHandlerArguments(
   }
 
   const params = new Map<string, unknown>([
+    ['params', request],
+    ['request', request],
     ['payload', request.payload],
     ['config', request.config],
     ['event', request.event],
@@ -85,14 +90,10 @@ function bindHandlerArguments(
   ]);
 
   const paramNames = getParameterNames(fn);
-  if (paramNames.length > 0) {
-    return paramNames.map((name) => {
-      const key = name.toLowerCase();
-      if (params.has(key)) {
-        return params.get(key);
-      }
-      return undefined;
-    });
+  // Bind by name only when at least one name is known; otherwise the handler
+  // uses its own naming and every argument would come through as undefined.
+  if (paramNames.some((name) => params.has(name.toLowerCase()))) {
+    return paramNames.map((name) => params.get(name.toLowerCase()));
   }
 
   // Positional fallback (arity-based)

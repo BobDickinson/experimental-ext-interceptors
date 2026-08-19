@@ -135,22 +135,6 @@ function isAbortLike(err: unknown): boolean {
   return err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
 }
 
-/** `AbortSignal.any` with a fallback for Node < 20.3. */
-function anySignal(signals: AbortSignal[]): AbortSignal {
-  if (typeof AbortSignal.any === 'function') {
-    return AbortSignal.any(signals);
-  }
-  const controller = new AbortController();
-  for (const s of signals) {
-    if (s.aborted) {
-      controller.abort(s.reason);
-      break;
-    }
-    s.addEventListener('abort', () => controller.abort(s.reason), { once: true });
-  }
-  return controller.signal;
-}
-
 function combineSignals(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
   const present = signals.filter((s): s is AbortSignal => s != null);
   if (present.length === 0) {
@@ -159,7 +143,7 @@ function combineSignals(...signals: Array<AbortSignal | undefined>): AbortSignal
   if (present.length === 1) {
     return present[0];
   }
-  return anySignal(present);
+  return AbortSignal.any(present);
 }
 
 /** Signal for one invoke: chain signal plus the entry's per-interceptor timeout. */

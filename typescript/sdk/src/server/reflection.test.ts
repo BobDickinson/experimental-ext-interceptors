@@ -147,6 +147,47 @@ describe('defineInterceptor / reflection', () => {
     expect(result.phase).toBe('response');
   });
 
+  it('binds the full request to a handler that takes `params`', async () => {
+    let seen: unknown = 'unset';
+
+    const handler: InterceptorHandlerFn = ((params: InvokeInterceptorRequestParams) => {
+      seen = params;
+      return validationSuccess(params.phase);
+    }) as InterceptorHandlerFn;
+
+    await invokeHandlerFunction(handler, 'validation', {
+      name: 'x',
+      event: InterceptionEvents.ToolsCall,
+      phase: 'request',
+      payload: { marker: 1 },
+      context: { sessionId: 'sess-1' },
+    });
+    expect(seen).toMatchObject({
+      event: InterceptionEvents.ToolsCall,
+      phase: 'request',
+      payload: { marker: 1 },
+      context: { sessionId: 'sess-1' },
+    });
+  });
+
+  it('falls back to positional binding when no parameter name is recognized', async () => {
+    const seen: unknown[] = [];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handler: InterceptorHandlerFn = ((first: any, second: any) => {
+      seen.push(first, second);
+      return validationSuccess('request');
+    }) as InterceptorHandlerFn;
+
+    await invokeHandlerFunction(handler, 'validation', {
+      name: 'x',
+      event: InterceptionEvents.ToolsCall,
+      phase: 'request',
+      payload: { marker: 2 },
+    });
+    expect(seen).toEqual([{ marker: 2 }, InterceptionEvents.ToolsCall]);
+  });
+
   it('supports async handlers', async () => {
     const reg = defineInterceptor(
       { name: 'async-val', type: 'validation' },
