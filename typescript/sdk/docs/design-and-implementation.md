@@ -115,7 +115,7 @@ Primary behavioral reference for parity:
 | Client | `McpClientInterceptorExtensions`, `InterceptorChainOrchestrator`, `InterceptingMcpClient` |
 | Server | `InterceptorMessageFilter`, `McpServerInterceptorBuilderExtensions`, `ReflectionMcpServerInterceptor` |
 | Gateway | `McpInterceptorGateway`, `InterceptorChainRunner`, transparent proxy + optional SEP passthrough |
-| Init capability | `Extensions["interceptors"]` (not SEP’s top-level `interceptor` field) |
+| Init capability | `Extensions["io.modelcontextprotocol/interceptors"]` (SEP-2133 extensions format, not SEP’s top-level `interceptor` field) |
 
 TypeScript uses **`Server.setRequestHandler`** for extension methods where C# uses incoming **message filters**, because the TypeScript SDK exposes handler registration publicly.
 
@@ -131,7 +131,6 @@ Build: `tsc -p tsconfig.build.json` → `dist/`; lint uses `tsconfig.eslint.json
 
 | Area | C# | TypeScript today |
 |------|-----|------------------|
-| Init capability wire shape | `extensions["interceptors"]` | SEP-2133 `capabilities.extensions["io.modelcontextprotocol/interceptors"]` (§3, README) |
 | Server registration | `InterceptorMessageFilter` on incoming messages | `Server.setRequestHandler` for extension methods (§4.1) |
 | Builder / host helpers | `IMcpServerBuilder`, filter pipeline | `registerInterceptorsOnServer` only (no separate `interceptor-host.ts` helper) |
 | `InterceptingMcpClient` tests | Broad gateway-overlap scenarios | One E2E: `tools/call` request mutation; API covers list/prompts/resources/subscribe |
