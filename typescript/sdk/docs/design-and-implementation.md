@@ -29,7 +29,7 @@ Implementation targets the **v2** package split directly (the original v1 implem
 ### 1.2 Package and tooling
 
 - **Location:** `/typescript/sdk`, package name **`mcp-ext-interceptors`**.
-- **Preserve** existing project configuration unless there is a strong, documented reason to change it: Node **≥20**, ESM, **`tsc`** → `dist/`, **Vitest**, **ESLint**, single root **`exports`** entry.
+- **Preserve** existing project configuration unless there is a strong, documented reason to change it: Node **≥22**, ESM, **`tsc`** → `dist/`, **Vitest**, **ESLint**, single root **`exports`** entry.
 - **Publishing:** One npm package with logical modules under `src/` (`protocol`, `client`, `server`, `gateway`), not a multi-package monorepo like upstream `typescript-sdk`.
 - **Dependencies:** **`peerDependencies`** on `@modelcontextprotocol/client` and `@modelcontextprotocol/server` **^2.0.0** (with matching **`devDependencies`** for reproducible CI and local tests); regular **`dependencies`** on `@modelcontextprotocol/core` (spec Zod `*Schema` constants) and `zod` **^4.2.0**, both imported directly by `src/protocol`.
 
