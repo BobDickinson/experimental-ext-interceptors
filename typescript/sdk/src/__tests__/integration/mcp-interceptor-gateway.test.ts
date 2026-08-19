@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import type { InterceptorClientTransport } from '../../gateway/mcp-interceptor-server-connection-options.js';
 import { InterceptionEvents } from '../../protocol/constants.js';
 import { validationFailure, validationSuccess } from '../../protocol/results.js';
-import { listInterceptors } from '../../client/client-extensions.js';
+import { invokeInterceptor, listInterceptors } from '../../client/client-extensions.js';
 import { McpInterceptorGateway } from '../../gateway/mcp-interceptor-gateway.js';
 import {
   connectEchoBackend,
@@ -496,6 +496,56 @@ describe('McpInterceptorGateway', () => {
     const result = await listInterceptors(proxy.proxyClient);
     expect(result.interceptors).toHaveLength(2);
     expect(result.interceptors.map((i) => i.name).sort()).toEqual(['mutator-1', 'validator-1']);
+
+    await proxy.close();
+    await host1.close();
+    await host2.close();
+    await backend.close();
+  });
+
+  it('rejects interceptor/invoke when two hosts registered the same name', async () => {
+    const descriptor = {
+      name: 'shared-name',
+      type: 'validation' as const,
+      hooks: [{ events: [InterceptionEvents.ToolsCall], phase: 'request' as const }],
+    };
+    const host1 = await connectInterceptorHost([
+      { descriptor, handler: () => validationSuccess('request') },
+    ]);
+    const host2 = await connectInterceptorHost([
+      { descriptor: { ...descriptor }, handler: () => validationSuccess('request') },
+      {
+        descriptor: { ...descriptor, name: 'unique-name' },
+        handler: () => validationSuccess('request'),
+      },
+    ]);
+    const backend = await connectEchoBackend();
+
+    const gateway = new McpInterceptorGateway({
+      backendClient: backend.client,
+      interceptorClients: [host1.client, host2.client],
+      exposeInterceptorProtocol: true,
+    });
+
+    const proxy = await connectGatewayProxy(gateway);
+
+    await expect(
+      invokeInterceptor(proxy.proxyClient, {
+        name: 'shared-name',
+        event: InterceptionEvents.ToolsCall,
+        phase: 'request',
+        payload: { name: 'echo', arguments: {} },
+      }),
+    ).rejects.toThrow(/registered on more than one host/i);
+
+    // A name that is unique across hosts still routes.
+    const ok = await invokeInterceptor(proxy.proxyClient, {
+      name: 'unique-name',
+      event: InterceptionEvents.ToolsCall,
+      phase: 'request',
+      payload: { name: 'echo', arguments: {} },
+    });
+    expect(ok.type).toBe('validation');
 
     await proxy.close();
     await host1.close();

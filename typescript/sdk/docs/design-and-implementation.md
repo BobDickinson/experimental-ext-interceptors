@@ -121,7 +121,7 @@ TypeScript uses **`Server.setRequestHandler`** for extension methods where C# us
 
 ### 4.2 TypeScript package today
 
-The SDK is **implemented** end-to-end: protocol types, client extensions and chain orchestration (including multi-host merge), interceptor host registration, reflection helpers, transparent gateway, runnable examples, and package **README**. **91 Vitest tests**; `npm run build`, `npm test`, and `npm run lint` are green.
+The SDK is **implemented** end-to-end: protocol types, client extensions and chain orchestration (including multi-host merge), interceptor host registration, reflection helpers, transparent gateway, runnable examples, and package **README**. **96 Vitest tests**; `npm run build`, `npm test`, and `npm run lint` are green.
 
 Build: `tsc -p tsconfig.build.json` → `dist/`; lint uses `tsconfig.eslint.json` (includes test files).
 
@@ -516,6 +516,7 @@ Previously, **multi-host** callers used `InterceptorChainRunner`, which ran a **
 - Default: **`duplicateNamePolicy: 'error'`** — throw `DuplicateInterceptorNameError` listing name and host labels (invoke routing is ambiguous because `interceptor/invoke` only carries `name`).  
 - Optional: **`'first-wins'`** — keep first entry in host array order (documented for tests / explicit tiering only).  
 - Deployment guidance: use **globally unique** interceptor names when using merged chains.
+- Gateway SEP passthrough (`exposeInterceptorProtocol`): `interceptors/list` aggregates every host verbatim; `interceptor/invoke` rejects a name held by more than one host with `InvalidParams`, since the request carries only the name. Names unique across hosts route normally.
 
 ### 11.3 SEP compliance
 

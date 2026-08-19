@@ -28,6 +28,7 @@ function readInterceptorCapability(client: Client): InterceptorsCapability | und
 export class GatewayInterceptorProtocolBridge {
   private readonly interceptorClients: Client[];
   private clientByInterceptorName: Map<string, Client> | undefined;
+  private duplicateInterceptorNames = new Set<string>();
   private routingBuild: Promise<void> | undefined;
 
   constructor(interceptorClients: Client[]) {
@@ -95,6 +96,7 @@ export class GatewayInterceptorProtocolBridge {
   /** Drop cached name→client routing (e.g. after interceptor host reconnect). */
   invalidateRoutingCache(): void {
     this.clientByInterceptorName = undefined;
+    this.duplicateInterceptorNames = new Set();
     this.routingBuild = undefined;
   }
 
@@ -119,21 +121,33 @@ export class GatewayInterceptorProtocolBridge {
 
   private async buildRoutingTable(): Promise<void> {
     const map = new Map<string, Client>();
+    const duplicates = new Set<string>();
     for (const client of this.interceptorClients) {
       const listed = await listAllInterceptors(client);
       for (const descriptor of listed.interceptors) {
-        if (!map.has(descriptor.name)) {
+        if (map.has(descriptor.name)) {
+          duplicates.add(descriptor.name);
+        } else {
           map.set(descriptor.name, client);
         }
       }
     }
     this.clientByInterceptorName = map;
+    this.duplicateInterceptorNames = duplicates;
   }
 
   private async invokeOnInterceptorHost(
     params: InvokeInterceptorRequestParams,
   ): Promise<Awaited<ReturnType<typeof invokeInterceptor>>> {
     const routing = await this.ensureRoutingTable();
+    if (this.duplicateInterceptorNames.has(params.name)) {
+      // `interceptor/invoke` only carries a name, so picking a host would be a
+      // guess. Names unique across hosts still route normally.
+      throw new ProtocolError(
+        ProtocolErrorCode.InvalidParams,
+        `Interceptor name '${params.name}' is registered on more than one host; interceptor names must be unique across hosts`,
+      );
+    }
     const client = routing.get(params.name);
     if (!client) {
       throw interceptorNotFoundError(params.name);
