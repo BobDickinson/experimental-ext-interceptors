@@ -27,7 +27,7 @@ export interface McpInterceptorGatewayOptions {
    * Not supported with {@link McpInterceptorGatewayOptions.exposeInterceptorProtocol}.
    */
   interceptorServerConnectionResolver?: InterceptorServerConnectionResolver;
-  /** When set, only these lifecycle events run interceptor chains. */
+  /** When set, only these lifecycle events run interceptor chains. `'*'` runs them for every event. */
   events?: string[];
   timeoutMs?: number;
   defaultContext?: InvokeInterceptorContext;

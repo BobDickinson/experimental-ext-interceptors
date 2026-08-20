@@ -9,12 +9,13 @@ import type {
   InterceptorPhase,
   InvokeInterceptorContext,
 } from '../protocol/types.js';
+import { matchesEvent } from './chain-orchestrator.js';
 import { executeInterceptorChainOnClients } from './execute-interceptor-chain-on-clients.js';
 import type { DuplicateInterceptorNamePolicy } from './interceptor-chain-entry.js';
 
 export interface InterceptorChainRunnerOptions {
   interceptorClients: Client[];
-  /** When set, only these lifecycle events are intercepted. */
+  /** When set, only these lifecycle events are intercepted. `'*'` intercepts every event. */
   events?: string[];
   timeoutMs?: number;
   defaultContext?: InvokeInterceptorContext;
@@ -45,7 +46,7 @@ export class InterceptorChainRunner {
     if (!this.events || this.events.length === 0) {
       return true;
     }
-    return this.events.includes(eventName);
+    return matchesEvent(this.events, eventName);
   }
 
   async runChainPhase(

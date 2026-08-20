@@ -121,7 +121,7 @@ TypeScript uses **`Server.setRequestHandler`** for extension methods where C# us
 
 ### 4.2 TypeScript package today
 
-The SDK is **implemented** end-to-end: protocol types, client extensions and chain orchestration (including multi-host merge), interceptor host registration, reflection helpers, transparent gateway, runnable examples, and package **README**. **98 Vitest tests**; `npm run build`, `npm test`, and `npm run lint` are green.
+The SDK is **implemented** end-to-end: protocol types, client extensions and chain orchestration (including multi-host merge), interceptor host registration, reflection helpers, transparent gateway, runnable examples, and package **README**. **99 Vitest tests**; `npm run build`, `npm test`, and `npm run lint` are green.
 
 Build: `tsc -p tsconfig.build.json` → `dist/`; lint uses `tsconfig.eslint.json` (includes test files).
 

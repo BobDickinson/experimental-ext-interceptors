@@ -16,6 +16,15 @@ describe('InterceptorChainRunner', () => {
     expect(runner.shouldIntercept(InterceptionEvents.PromptsGet)).toBe(false);
   });
 
+  it('treats the wildcard event as intercept-everything', () => {
+    const runner = new InterceptorChainRunner({
+      interceptorClients: [],
+      events: [InterceptionEvents.All],
+    });
+    expect(runner.shouldIntercept(InterceptionEvents.ToolsCall)).toBe(true);
+    expect(runner.shouldIntercept(InterceptionEvents.ResourcesRead)).toBe(true);
+  });
+
   it('runChainPhaseOrThrow throws validation exception in-process', async () => {
     const host = await connectInterceptorHost([
       {
