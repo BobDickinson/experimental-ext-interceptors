@@ -6,8 +6,7 @@ import { listInterceptors, invokeInterceptor } from '../client/client-extensions
 import { buildInterceptorsCapability, collectSupportedEvents } from './capabilities.js';
 import { connectInterceptorHost } from '../__tests__/fixtures/hosts.js';
 import { registerInterceptorsOnServer, type RegisteredInterceptor } from './register-interceptors.js';
-import { Server } from '@modelcontextprotocol/server';
-import { ProtocolErrorCode } from "@modelcontextprotocol/server";
+import { ProtocolErrorCode, Server } from '@modelcontextprotocol/server';
 
 const toolsValidator: RegisteredInterceptor = {
   descriptor: {

@@ -44,6 +44,18 @@ describe('parseInterceptorResult', () => {
       expect(sink.metrics?.latencyMs).toBe(12.5);
     }
   });
+
+  it('rejects non-boolean flags instead of coercing them', () => {
+    expect(() =>
+      parseInterceptorResult({ type: 'validation', phase: 'request', valid: 'false' }),
+    ).toThrow();
+    expect(() =>
+      parseInterceptorResult({ type: 'mutation', phase: 'request', modified: 1 }),
+    ).toThrow();
+    expect(() =>
+      parseInterceptorResult({ type: 'sink', phase: 'response' }),
+    ).toThrow();
+  });
 });
 
 describe('interceptor descriptor JSON shape', () => {
