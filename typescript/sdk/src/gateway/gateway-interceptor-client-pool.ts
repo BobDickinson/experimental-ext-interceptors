@@ -5,6 +5,35 @@ import type { McpInterceptorServerConnectionOptions } from './mcp-interceptor-se
 import { connectInterceptorClient } from './connect-interceptor-client.js';
 import { GatewayResolvedInterceptorClients } from './gateway-resolved-interceptor-clients.js';
 
+/**
+ * Reject as soon as `signal` aborts, without disturbing `promise`.
+ *
+ * A pooled connection outlives the request that happened to open it, so one caller
+ * walking away must not cancel the connect the others are waiting on.
+ */
+function raceSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    return Promise.reject(signal.reason);
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (err) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
+  });
+}
+
 export class GatewayInterceptorClientPool {
   private readonly cache = new Map<string, Promise<Client>>();
 
@@ -35,19 +64,18 @@ export class GatewayInterceptorClientPool {
 
         let pending = this.cache.get(connectionId);
         if (!pending) {
-          pending = connectInterceptorClient(connection, signal);
+          // No per-request signal: the connection is shared, so it is not tied to
+          // the lifetime of whichever request opened it.
+          pending = connectInterceptorClient(connection);
           this.cache.set(connectionId, pending);
           pending.catch(() => {
             this.cache.delete(connectionId);
           });
         }
 
-        try {
-          clients.push(await pending);
-        } catch (error) {
-          this.cache.delete(connectionId);
-          throw error;
-        }
+        // A failed connect is evicted by the `catch` above; an abort here belongs to
+        // this request alone, so neither case should drop a healthy shared entry.
+        clients.push(await raceSignal(pending, signal));
       }
     } catch (error) {
       // A later connection failed: close the owned clients already connected in

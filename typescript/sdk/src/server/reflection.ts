@@ -61,13 +61,18 @@ export async function invokeHandlerFunction(
   return normalizeHandlerResult(result, request.phase, interceptorType);
 }
 
+/** `payload => …` — a single parameter written without parentheses. */
+const BARE_ARROW_PARAM = /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/;
+
 function bindHandlerArguments(
   fn: InterceptorHandlerFn,
   request: InvokeInterceptorRequestParams,
   signal?: AbortSignal,
 ): unknown[] {
   const src = fn.toString();
-  const parenMatch = src.match(/^[^(]*\(([^)]*)\)/);
+  // A bare arrow has no parameter list to inspect; skipping the paren match keeps
+  // an object literal in the body from being read as destructured parameters.
+  const parenMatch = BARE_ARROW_PARAM.test(src) ? null : src.match(/^[^(]*\(([^)]*)\)/);
   const paramsList = parenMatch?.[1]?.trim() ?? '';
 
   // Destructuring: ({ payload, phase }) => … — pass the full invoke params object.
@@ -116,6 +121,12 @@ function bindHandlerArguments(
 
 function getParameterNames(fn: InterceptorHandlerFn): string[] {
   const src = fn.toString();
+  // Matched first so the parenthesised pattern below cannot read the arguments of
+  // the first call in the body.
+  const bare = src.match(BARE_ARROW_PARAM);
+  if (bare?.[1]) {
+    return [bare[1]];
+  }
   const match = src.match(/^[^(]*\(([^)]*)\)/);
   if (!match?.[1]?.trim()) {
     return [];

@@ -188,6 +188,43 @@ describe('defineInterceptor / reflection', () => {
     expect(seen).toEqual([{ marker: 2 }, InterceptionEvents.ToolsCall]);
   });
 
+  // Built from source text because the transpiler prints `(params) =>` for every
+  // arrow in this file, so a parenthesis-free parameter cannot be written directly.
+  const bareArrow = (body: string): InterceptorHandlerFn =>
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    new Function(`return ${body}`)() as InterceptorHandlerFn;
+
+  it('binds a bare arrow parameter written without parentheses', async () => {
+    const handler = bareArrow(
+      'params => ({ type: "validation", phase: "request", valid: true, info: { seen: params } })',
+    );
+
+    const result = await invokeHandlerFunction(handler, 'validation', {
+      name: 'x',
+      event: InterceptionEvents.ToolsCall,
+      phase: 'request',
+      payload: { marker: 3 },
+    });
+    expect(result.info?.seen).toMatchObject({
+      event: InterceptionEvents.ToolsCall,
+      payload: { marker: 3 },
+    });
+  });
+
+  it('does not read an object literal in a bare arrow body as destructuring', async () => {
+    const handler = bareArrow(
+      'payload => ({ type: "validation", phase: "request", valid: true, info: { seen: payload } })',
+    );
+
+    const result = await invokeHandlerFunction(handler, 'validation', {
+      name: 'x',
+      event: InterceptionEvents.ToolsCall,
+      phase: 'request',
+      payload: { marker: 4 },
+    });
+    expect(result.info?.seen).toEqual({ marker: 4 });
+  });
+
   it('supports async handlers', async () => {
     const reg = defineInterceptor(
       { name: 'async-val', type: 'validation' },
